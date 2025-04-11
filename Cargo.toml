@@ -27,6 +27,7 @@ poem-openapi = { version = "5.0.0", features = ["swagger-ui"] }
 glob = "0.3.1"
 log = "0.4.17"
 simple_logger = "4.1.0"
+goo = "0.1.0"
 
 [dev-dependencies]
 tempfile = "3.13.0"
