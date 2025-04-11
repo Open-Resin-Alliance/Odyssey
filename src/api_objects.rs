@@ -26,15 +26,23 @@ pub struct FileMetadata {
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct PrintMetadata {
     pub file_data: FileMetadata,
-    pub used_material: f32,
-    pub print_time: f32,
-    pub layer_height: f32,
+    pub used_material: f64,
+    pub print_time: f64,
+    pub layer_height: f64,
+    pub layer_height_microns: u32,
     pub layer_count: usize,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Enum)]
+pub enum ThumbnailSize {
+    Large,
+    Small,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Object)]
 pub struct PhysicalState {
-    pub z: f32,
+    pub z: f64,
+    pub z_microns: u32,
     pub curing: bool,
 }
 
@@ -52,4 +60,12 @@ pub enum PrinterStatus {
     Printing,
     Idle,
     Shutdown,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Enum)]
+pub enum DisplayTest {
+    White,
+    Blank,
+    Grid,
+    Dimensions,
 }

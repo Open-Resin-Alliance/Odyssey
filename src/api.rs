@@ -16,6 +16,7 @@ use poem::{
         ServiceUnavailable, Unauthorized,
     },
     listener::TcpListener,
+    middleware::Cors,
     web::Data,
     EndpointExt, Result, Route, Server,
 };
@@ -27,13 +28,16 @@ use poem_openapi::{
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
+    fs,
     sync::{broadcast, mpsc, RwLock},
     time::interval,
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     api_objects::{
-        FileMetadata, LocationCategory, PhysicalState, PrintMetadata, PrinterState, PrinterStatus,
+        DisplayTest, FileMetadata, LocationCategory, PhysicalState, PrintMetadata, PrinterState,
+        PrinterStatus, ThumbnailSize,
     },
     configuration::{ApiConfig, Configuration},
     filetypes::printfile::PrintFile,
@@ -137,14 +141,16 @@ impl Api {
     #[oai(path = "/manual", method = "post")]
     async fn manual_control(
         &self,
-        z: Query<Option<f32>>,
+        z: Query<Option<f64>>,
         cure: Query<Option<bool>>,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
         Data(_state_ref): Data<&Arc<RwLock<PrinterState>>>,
     ) -> Result<()> {
         if let Query(Some(z)) = z {
             operation_sender
-                .send(Operation::ManualMove { z })
+                .send(Operation::ManualMove {
+                    z: (z * 1000.0).trunc() as u32,
+                })
                 .await
                 .map_err(ServiceUnavailable)?;
         }
@@ -186,6 +192,40 @@ impl Api {
             .map_err(ServiceUnavailable)?;
 
         Ok(())
+    }
+
+    #[oai(path = "/manual/display_test", method = "post")]
+    async fn manual_display_test(
+        &self,
+        Query(test): Query<DisplayTest>,
+        Data(operation_sender): Data<&mpsc::Sender<Operation>>,
+    ) -> Result<()> {
+        operation_sender
+            .send(Operation::ManualDisplayTest { test })
+            .await
+            .map_err(ServiceUnavailable)?;
+        Ok(())
+    }
+
+    #[oai(path = "/manual/display_layer", method = "post")]
+    async fn manual_display_layer(
+        &self,
+        Query(file_path): Query<String>,
+        Query(location): Query<Option<LocationCategory>>,
+        Query(layer): Query<usize>,
+        Data(operation_sender): Data<&mpsc::Sender<Operation>>,
+        Data(configuration): Data<&ApiConfig>,
+    ) -> Result<()> {
+        let location = location.unwrap_or(LocationCategory::Local);
+
+        let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
+
+        let file_data = Api::_get_filedata(full_file_path, &location, configuration)?;
+
+        operation_sender
+            .send(Operation::ManualDisplayLayer { file_data, layer })
+            .await
+            .map_err(ServiceUnavailable)
     }
 
     #[oai(path = "/files", method = "post")]
@@ -466,9 +506,11 @@ impl Api {
         &self,
         Query(file_path): Query<String>,
         Query(location): Query<Option<LocationCategory>>,
+        Query(size): Query<Option<ThumbnailSize>>,
         Data(configuration): Data<&ApiConfig>,
     ) -> Result<Attachment<Vec<u8>>> {
         let location = location.unwrap_or(LocationCategory::Local);
+        let size = size.unwrap_or(ThumbnailSize::Small);
 
         log::info!("Getting thumbnail from {:?} in {:?}", file_path, location);
         let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
@@ -477,20 +519,37 @@ impl Api {
         log::info!("Extracting print thumbnail");
 
         let file_data = Sl1::from_file(file_metadata)
-            .get_thumbnail()
+            .get_thumbnail(size)
             .map_err(InternalServerError)?;
 
         Ok(Attachment::new(file_data.data).filename(file_data.name))
     }
 
-    #[oai(path = "/file", method = "post")]
+    #[oai(path = "/file", method = "delete")]
     async fn delete_file(
         &self,
-        Query(_file_path): Query<String>,
-        Query(_location): Query<Option<String>>,
-        Data(_configuration): Data<&ApiConfig>,
+        Query(file_path): Query<String>,
+        Query(location): Query<Option<LocationCategory>>,
+        Data(configuration): Data<&ApiConfig>,
     ) -> Result<Json<FileMetadata>> {
-        Err(NotImplemented(MethodNotAllowedError))
+        let location = location.unwrap_or(LocationCategory::Local);
+        log::info!("Deleting file {:?} in {:?}", file_path, location);
+
+        let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
+
+        let metadata = Api::_get_filedata(full_file_path.clone(), &location, configuration)?;
+
+        if full_file_path.is_dir() {
+            fs::remove_dir_all(full_file_path)
+                .await
+                .map_err(InternalServerError)?;
+        } else {
+            fs::remove_file(full_file_path)
+                .await
+                .map_err(InternalServerError)?;
+        }
+
+        Ok(Json(metadata))
     }
 }
 
@@ -517,6 +576,7 @@ pub async fn start_api(
     full_config: Configuration,
     operation_sender: mpsc::Sender<Operation>,
     state_receiver: broadcast::Receiver<PrinterState>,
+    cancellation_token: CancellationToken,
 ) {
     let state_ref = Arc::new(RwLock::new(PrinterState {
         print_data: None,
@@ -524,6 +584,7 @@ pub async fn start_api(
         layer: None,
         physical_state: PhysicalState {
             z: 0.0,
+            z_microns: 0,
             curing: false,
         },
         status: PrinterStatus::Shutdown,
@@ -550,10 +611,15 @@ pub async fn start_api(
         .data(operation_sender)
         .data(state_ref.clone())
         .data(full_config.clone())
-        .data(configuration.clone());
+        .data(configuration.clone())
+        .with(Cors::new());
 
     Server::new(TcpListener::bind(addr))
-        .run(app)
+        .run_with_graceful_shutdown(
+            app,
+            cancellation_token.clone().cancelled_owned(),
+            Option::None,
+        )
         .await
         .expect("Error encountered");
 }

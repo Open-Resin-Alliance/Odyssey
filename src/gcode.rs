@@ -1,11 +1,10 @@
 use core::panic;
 use std::collections::HashMap;
-use std::io::{self, BufRead, BufReader, Error, ErrorKind, Write};
+use std::io::{Error, ErrorKind};
 
 use async_trait::async_trait;
 use regex::Regex;
-use serialport::{ClearBuffer, SerialPort, SerialPortBuilder, TTYPort};
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::broadcast;
 use tokio::time::{interval, sleep, Duration};
 
 use crate::api_objects::PhysicalState;
@@ -16,59 +15,26 @@ pub struct Gcode {
     pub config: GcodeConfig,
     pub state: PhysicalState,
     pub gcode_substitutions: HashMap<String, String>,
-    pub serial_port: TTYPort,
-    pub transceiver: (Sender<String>, Receiver<String>),
+    pub serial_receiver: broadcast::Receiver<String>,
+    pub serial_sender: broadcast::Sender<String>,
 }
 
 impl Gcode {
-    pub fn new(config: Configuration, serial_builder: SerialPortBuilder) -> Gcode {
-        let transceiver = mpsc::channel(100);
-        let mut port = serial_builder
-            .open_native()
-            .expect("Unable to open serial connection");
-
-        port.set_exclusive(false)
-            .expect("Unable to set serial port exclusivity(false)");
-        port.clear(ClearBuffer::All)
-            .expect("Unable to clear serialport buffers");
-
+    pub fn new(
+        config: Configuration,
+        serial_receiver: broadcast::Receiver<String>,
+        serial_sender: broadcast::Sender<String>,
+    ) -> Gcode {
         Gcode {
             config: config.gcode,
             state: PhysicalState {
                 z: 0.0,
+                z_microns: 0,
                 curing: false,
             },
             gcode_substitutions: HashMap::new(),
-            serial_port: port,
-            transceiver,
-        }
-    }
-
-    pub async fn run_listener(port: TTYPort, sender: Sender<String>) {
-        let mut buf_reader = BufReader::new(port);
-        let mut interval = interval(Duration::from_millis(100));
-
-        loop {
-            interval.tick().await;
-            let mut read_string = String::new();
-            match buf_reader.read_line(&mut read_string) {
-                Err(e) => match e.kind() {
-                    io::ErrorKind::TimedOut => {
-                        continue;
-                    }
-                    // Broken Pipe here
-                    other_error => panic!("Error reading from serial port: {:?}", other_error),
-                },
-                Ok(n) => {
-                    if n > 0 {
-                        log::debug!("Read {} bytes from serial: {}", n, read_string.trim_end());
-                        sender
-                            .send(read_string)
-                            .await
-                            .expect("Unable to send message to channel");
-                    }
-                }
-            };
+            serial_receiver,
+            serial_sender,
         }
     }
 
@@ -93,12 +59,10 @@ impl Gcode {
         let parsed_code = self.parse_gcode(code) + "\r\n";
         log::debug!("Executing gcode: {}", parsed_code.trim_end());
 
-        let n = self.serial_port.write(parsed_code.as_bytes())?;
-        self.serial_port
-            .flush()
-            .expect("Unable to flush serial connection");
+        self.serial_sender
+            .send(parsed_code)
+            .map_err(|error| Error::new(ErrorKind::BrokenPipe, error))?;
 
-        log::trace!("Wrote {} bytes", n);
         // Force a delay between commands
         sleep(Duration::from_millis(100)).await;
         Ok(())
@@ -129,18 +93,23 @@ impl Gcode {
 
     // Consume all available responses in case of ack messages before desired
     async fn check_response(&mut self, response: &String) -> bool {
-        let mut has_response = self
-            .transceiver
-            .1
+        self.serial_receiver
             .recv()
             .await
             .expect("Unable to receive message from channel")
-            .contains(response);
+            .contains(response)
+    }
 
-        while let Ok(resp) = self.transceiver.1.try_recv() {
-            has_response = has_response || resp.contains(response);
+    // Consume all responses from serial port, to ensure we'll get the correct corresponding
+    async fn flush_serial_input(&mut self) -> std::io::Result<()> {
+        while !self.serial_receiver.is_empty() {
+            let _ = self
+                .serial_receiver
+                .recv()
+                .await
+                .map_err(|error| Error::new(ErrorKind::BrokenPipe, error))?;
         }
-        has_response
+        Ok(())
     }
 
     async fn send_and_await_gcode(
@@ -149,6 +118,7 @@ impl Gcode {
         expect: String,
         timeout_seconds: usize,
     ) -> std::io::Result<()> {
+        self.flush_serial_input().await?;
         self.send_gcode(code).await?;
         self.await_response(expect, timeout_seconds).await?;
         Ok(())
@@ -164,8 +134,9 @@ impl Gcode {
     /// Set the internally-stored position. Any method which uses a send_gcode
     /// method to cause the z axis to move, should call this method to reflect
     /// that change
-    fn set_position(&mut self, position: f32) -> PhysicalState {
-        self.state.z = position;
+    fn set_position(&mut self, position: u32) -> PhysicalState {
+        self.state.z_microns = position;
+        self.state.z = (position as f64) / 1000.0;
         self.state
     }
 
@@ -187,15 +158,7 @@ impl Gcode {
 
 #[async_trait]
 impl HardwareControl for Gcode {
-    async fn initialize(&mut self) {
-        // Run the serial port listener task
-        tokio::spawn(Gcode::run_listener(
-            self.serial_port
-                .try_clone_native()
-                .expect("Unable to clone serial connection"),
-            self.transceiver.0.clone(),
-        ));
-    }
+    async fn initialize(&mut self) {}
 
     async fn is_ready(&mut self) -> bool {
         self.send_and_check_gcode(
@@ -217,10 +180,7 @@ impl HardwareControl for Gcode {
         Ok(self.state)
     }
 
-    async fn move_z(&mut self, z: f32, speed: f32) -> std::io::Result<PhysicalState> {
-        // To handle floating point precision issues, truncate to micron precision
-        let z = (z * 1000.0).trunc() / 1000.0;
-
+    async fn move_z(&mut self, z: u32, speed: f64) -> std::io::Result<PhysicalState> {
         // Convert from mm/s to mm/min f value
         let speed = speed * 60.0;
 

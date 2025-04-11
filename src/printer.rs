@@ -1,7 +1,9 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc};
+use tokio_util::sync::CancellationToken;
 
+use crate::api_objects::DisplayTest;
 use crate::api_objects::FileMetadata;
 use crate::api_objects::PhysicalState;
 use crate::api_objects::PrintMetadata;
@@ -19,16 +21,24 @@ pub struct Printer<T: HardwareControl> {
     pub display: PrintDisplay,
     pub hardware_controller: T,
     pub state: PrinterState,
-    pub operation_channel: (mpsc::Sender<Operation>, mpsc::Receiver<Operation>),
-    pub status_channel: (
-        broadcast::Sender<PrinterState>,
-        broadcast::Receiver<PrinterState>,
-    ),
+    pub operation_receiver: mpsc::Receiver<Operation>,
+    pub status_sender: broadcast::Sender<PrinterState>,
 }
 
 impl<T: HardwareControl> Printer<T> {
-    pub fn new(config: PrinterConfig, display: PrintDisplay, hardware_controller: T) -> Printer<T> {
-        Printer {
+    pub async fn start_printer(
+        config: PrinterConfig,
+        display: PrintDisplay,
+        mut hardware_controller: T,
+        operation_receiver: mpsc::Receiver<Operation>,
+        status_sender: broadcast::Sender<PrinterState>,
+        cancellation_token: CancellationToken,
+    ) {
+        hardware_controller.add_print_variable("max_z".to_string(), config.max_z.to_string());
+        hardware_controller
+            .add_print_variable("z_lift".to_string(), config.default_lift.to_string());
+
+        let mut printer = Printer {
             config,
             display,
             hardware_controller,
@@ -38,13 +48,16 @@ impl<T: HardwareControl> Printer<T> {
                 layer: None,
                 physical_state: PhysicalState {
                     z: 0.0,
+                    z_microns: 0,
                     curing: false,
                 },
                 status: PrinterStatus::Shutdown,
             },
-            operation_channel: mpsc::channel(100),
-            status_channel: broadcast::channel(100),
-        }
+            operation_receiver,
+            status_sender,
+        };
+
+        printer.start_statemachine(cancellation_token).await
     }
 
     pub async fn print_event_loop(&mut self) {
@@ -54,7 +67,9 @@ impl<T: HardwareControl> Printer<T> {
         let layer_height = file.get_layer_height();
 
         // Get movement values from file, or configured defaults
-        let lift = file.get_lift().unwrap_or(self.config.default_lift);
+        let lift = file
+            .get_lift()
+            .unwrap_or((self.config.default_lift * 1000.0).trunc() as u32);
         let up_speed = file.get_up_speed().unwrap_or(self.config.default_up_speed);
         let down_speed = file
             .get_down_speed()
@@ -138,16 +153,16 @@ impl<T: HardwareControl> Printer<T> {
         &mut self,
         cur_frame: Frame,
         layer: usize,
-        layer_height: f32,
-        lift: f32,
-        up_speed: f32,
-        down_speed: f32,
-        wait_before_exposure: f32,
-        wait_after_exposure: f32,
+        layer_height: u32,
+        lift: u32,
+        up_speed: f64,
+        down_speed: f64,
+        wait_before_exposure: f64,
+        wait_after_exposure: f64,
     ) {
         log::info!("Begin layer {}", layer);
         self.wrapped_start_layer(layer).await;
-        let layer_z = ((layer + 1) as f32) * layer_height;
+        let layer_z = ((layer + 1) as u32) * layer_height;
         //let lift_z = layer_z+
 
         let exposure_time = cur_frame.exposure_time;
@@ -160,7 +175,7 @@ impl<T: HardwareControl> Printer<T> {
 
         // Wait for configured time before curing
         log::info!("Waiting for {}s before cure", wait_before_exposure);
-        sleep(Duration::from_secs_f32(wait_before_exposure)).await;
+        sleep(Duration::from_secs_f64(wait_before_exposure)).await;
 
         // Display the current frame to the LCD
         log::info!("Loading layer to display");
@@ -169,12 +184,12 @@ impl<T: HardwareControl> Printer<T> {
         // Activate the UV array for the prescribed length of time
         log::info!("Curing layer for {}s", exposure_time);
         self.wrapped_start_cure().await;
-        sleep(Duration::from_secs_f32(exposure_time)).await;
+        sleep(Duration::from_secs_f64(exposure_time)).await;
         self.wrapped_stop_cure().await;
 
         // Wait for configured time after curing
         log::info!("Waiting for {}s after cure", wait_after_exposure);
-        sleep(Duration::from_secs_f32(wait_after_exposure)).await;
+        sleep(Duration::from_secs_f64(wait_after_exposure)).await;
     }
 
     async fn wrapped_start_print(&mut self) {
@@ -212,7 +227,7 @@ impl<T: HardwareControl> Printer<T> {
     }
 
     // Move and update printer state
-    async fn wrapped_move(&mut self, z: f32, speed: f32) {
+    async fn wrapped_move(&mut self, z: u32, speed: f64) {
         if let Ok(physical_state) = self.hardware_controller.move_z(z, speed).await {
             self.update_physical_state(physical_state).await;
         } else {
@@ -235,6 +250,13 @@ impl<T: HardwareControl> Printer<T> {
             self.update_physical_state(physical_state).await;
         } else {
             self.shutdown().await;
+        }
+    }
+
+    // Move only if paused
+    async fn paused_move(&mut self, z: u32, speed: f64) {
+        if self.state.paused.unwrap_or(false) {
+            self.wrapped_move(z.max(self._get_layer_z()), speed).await;
         }
     }
 
@@ -265,6 +287,14 @@ impl<T: HardwareControl> Printer<T> {
 
     async fn pause_print(&mut self) {
         self.update_paused(true).await;
+        self.wrapped_move(
+            ((self.config.max_z * 1000.0).trunc() as u32).min(
+                self.state.physical_state.z_microns
+                    + ((self.config.pause_lift * 1000.0).trunc() as u32),
+            ),
+            self.config.default_up_speed,
+        )
+        .await;
     }
 
     async fn resume_print(&mut self) {
@@ -275,11 +305,32 @@ impl<T: HardwareControl> Printer<T> {
         self.state.layer.unwrap_or(0)
     }
 
+    fn _get_layer_z(&self) -> u32 {
+        ((self._get_layer() + 1) as u32)
+            * self
+                .state
+                .print_data
+                .clone()
+                .map(|print| print.layer_height_microns)
+                .unwrap_or(0)
+    }
+
     fn get_file_data(&self) -> Option<FileMetadata> {
         self.state
             .print_data
             .clone()
             .map(|print_data| print_data.file_data)
+    }
+
+    async fn display_file_layer(&mut self, file_data: FileMetadata, layer: usize) {
+        let mut file: Box<dyn PrintFile + Send> = Box::new(Sl1::from_file(file_data.clone()));
+
+        let optional_frame = Frame::from_layer(file.get_layer_data(layer).await).await;
+
+        if let Some(frame) = optional_frame {
+            log::info!("Loading layer {} from {} to display", layer, file_data.name);
+            self.display.display_frame(frame);
+        }
     }
 
     async fn enter_printing_state(&mut self, print_data: PrintMetadata) {
@@ -336,7 +387,7 @@ impl<T: HardwareControl> Printer<T> {
             return;
         }*/
 
-        let mut op_result = self.operation_channel.1.try_recv();
+        let mut op_result = self.operation_receiver.try_recv();
 
         while let Ok(operation) = op_result {
             match operation {
@@ -345,9 +396,12 @@ impl<T: HardwareControl> Printer<T> {
                 Operation::StopPrint => self.set_idle().await,
                 Operation::QueryState => self.send_status().await,
                 Operation::Shutdown => self.shutdown().await,
+                Operation::ManualMove { z } => {
+                    self.paused_move(z, self.config.default_up_speed).await
+                }
                 _ => (),
             };
-            op_result = self.operation_channel.1.try_recv();
+            op_result = self.operation_receiver.try_recv();
         }
     }
 
@@ -386,30 +440,35 @@ impl<T: HardwareControl> Printer<T> {
         self.state.paused = None;
         self.state.print_data = None;
         self.state.physical_state = PhysicalState {
-            z: f32::MAX,
+            z: f64::MAX,
+            z_microns: u32::MAX,
             curing: false,
         }
     }
 
-    pub async fn get_operation_sender(&mut self) -> mpsc::Sender<Operation> {
-        self.operation_channel.0.clone()
-    }
+    /*
+       pub async fn get_operation_sender(&mut self) -> mpsc::Sender<Operation> {
+           self.operation_channel.0.clone()
+       }
 
-    pub async fn get_status_receiver(&mut self) -> broadcast::Receiver<PrinterState> {
-        self.status_channel.0.subscribe()
-    }
+       pub async fn get_status_receiver(&mut self) -> broadcast::Receiver<PrinterState> {
+           self.status_channel.0.subscribe()
+       }
+    */
 
     async fn send_status(&mut self) {
-        self.status_channel
-            .0
+        self.status_sender
             .send(self.state.clone())
             .expect("Failed to send state update");
     }
 
-    pub async fn start_statemachine(&mut self) {
+    pub async fn start_statemachine(&mut self, cancellation_token: CancellationToken) {
         self.hardware_controller.initialize().await;
 
         loop {
+            if cancellation_token.is_cancelled() {
+                break;
+            }
             match self.state.status {
                 PrinterStatus::Idle => self.idle_event_loop().await,
                 PrinterStatus::Printing => self.print_event_loop().await,
@@ -439,13 +498,13 @@ impl<T: HardwareControl> Printer<T> {
 
     // While in shutdown state, process operations to drop them from queue
     async fn shutdown_operation_handler(&mut self) {
-        let mut op_result = self.operation_channel.1.try_recv();
+        let mut op_result = self.operation_receiver.try_recv();
 
         while let Ok(operation) = op_result {
             if let Operation::QueryState = operation {
                 self.send_status().await
             }
-            op_result = self.operation_channel.1.try_recv();
+            op_result = self.operation_receiver.try_recv();
         }
     }
 
@@ -467,7 +526,7 @@ impl<T: HardwareControl> Printer<T> {
             return;
         }*/
 
-        let mut op_result = self.operation_channel.1.try_recv();
+        let mut op_result = self.operation_receiver.try_recv();
 
         while let Ok(operation) = op_result {
             match operation {
@@ -485,10 +544,16 @@ impl<T: HardwareControl> Printer<T> {
                         self.wrapped_stop_cure().await;
                     }
                 }
+                Operation::ManualDisplayTest { test } => {
+                    self.display.display_test(test);
+                }
+                Operation::ManualDisplayLayer { file_data, layer } => {
+                    self.display_file_layer(file_data, layer).await;
+                }
                 Operation::Shutdown => self.shutdown().await,
                 _ => (),
             };
-            op_result = self.operation_channel.1.try_recv();
+            op_result = self.operation_receiver.try_recv();
         }
     }
 
@@ -520,15 +585,29 @@ impl Frame {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Operation {
-    StartPrint { file_data: FileMetadata },
+    StartPrint {
+        file_data: FileMetadata,
+    },
     StopPrint,
     PausePrint,
     ResumePrint,
-    ManualMove { z: f32 },
-    ManualCure { cure: bool },
+    ManualMove {
+        z: u32,
+    },
+    ManualCure {
+        cure: bool,
+    },
     ManualHome,
-    ManualCommand { command: String },
-    ManualDisplay { file_name: String },
+    ManualCommand {
+        command: String,
+    },
+    ManualDisplayLayer {
+        file_data: FileMetadata,
+        layer: usize,
+    },
+    ManualDisplayTest {
+        test: DisplayTest,
+    },
     QueryState,
     Shutdown,
 }
@@ -541,7 +620,7 @@ pub trait HardwareControl {
     async fn manual_command(&mut self, command: String) -> std::io::Result<PhysicalState>;
     async fn start_print(&mut self) -> std::io::Result<PhysicalState>;
     async fn end_print(&mut self) -> std::io::Result<PhysicalState>;
-    async fn move_z(&mut self, z: f32, speed: f32) -> std::io::Result<PhysicalState>;
+    async fn move_z(&mut self, z: u32, speed: f64) -> std::io::Result<PhysicalState>;
     async fn start_layer(&mut self, layer: usize) -> std::io::Result<PhysicalState>;
     async fn start_curing(&mut self) -> std::io::Result<PhysicalState>;
     async fn stop_curing(&mut self) -> std::io::Result<PhysicalState>;

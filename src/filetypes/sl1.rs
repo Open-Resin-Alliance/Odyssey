@@ -11,12 +11,13 @@ use serde::Deserialize;
 use zip::ZipArchive;
 
 use crate::{
-    api_objects::{FileData, FileMetadata, PrintMetadata},
-    filetypes::printfile::{Layer, PrintFile},
+    api_objects::{FileData, FileMetadata, PrintMetadata, ThumbnailSize},
+    printfile::{Layer, PrintFile},
 };
 
 const CONFIG_FILE: &str = "config.ini";
-const THUMBNAIL_FILE: &str = "thumbnail/thumbnail400x400.png";
+const THUMBNAIL_SMALL: &str = "thumbnail/thumbnail400x400.png";
+const THUMBNAIL_LARGE: &str = "thumbnail/thumbnail800x480.png";
 
 /// PrintConfig object encompassing the fields stored in `config.ini` inside a `.sl1` file
 #[derive(Debug, Deserialize)]
@@ -24,31 +25,31 @@ const THUMBNAIL_FILE: &str = "thumbnail/thumbnail400x400.png";
 #[allow(dead_code)]
 struct PrintConfig {
     action: String,
-    exp_time: f32,
-    exp_time_first: f32,
+    exp_time: f64,
+    exp_time_first: f64,
     exp_user_profile: usize,
     file_creation_timestamp: String,
     hollow: usize,
     job_dir: String,
-    layer_height: f32,
+    layer_height: f64,
     material_name: String,
     num_fade: usize,
     num_fast: usize,
     num_slow: usize,
     print_profile: String,
-    print_time: f32,
+    print_time: f64,
     printer_model: String,
     printer_profile: String,
     printer_variant: String,
     prusa_slicer_version: String,
-    used_material: f32,
+    used_material: f64,
 }
 
 impl PrintConfig {
     /// Compute the exposure time of the given frame index, based on the PrintConfig
-    fn exposure_time(&self, index: usize) -> f32 {
+    fn exposure_time(&self, index: usize) -> f64 {
         if index < self.num_fade {
-            let fade_rate = (self.num_fade - index) as f32 / self.num_fade as f32;
+            let fade_rate = (self.num_fade - index) as f64 / self.num_fade as f64;
             self.exp_time + (self.exp_time_first - self.exp_time) * (fade_rate)
         } else {
             self.exp_time
@@ -107,6 +108,7 @@ impl PrintFile for Sl1 {
             used_material: config.used_material,
             print_time: config.print_time,
             layer_height: config.layer_height,
+            layer_height_microns: ((config.layer_height * 1000.0).trunc() as u32),
             layer_count: frame_list.len(),
         };
 
@@ -143,16 +145,19 @@ impl PrintFile for Sl1 {
         self.frame_list.len()
     }
 
-    fn get_layer_height(&self) -> f32 {
-        self.config.layer_height
+    fn get_layer_height(&self) -> u32 {
+        (self.config.layer_height * 1000.0).trunc() as u32
     }
 
     fn get_metadata(&self) -> PrintMetadata {
         self.metadata.clone()
     }
 
-    fn get_thumbnail(&mut self) -> Result<FileData, Error> {
-        let mut thumbnail_file = self.archive.by_name(THUMBNAIL_FILE)?;
+    fn get_thumbnail(&mut self, size: ThumbnailSize) -> Result<FileData, Error> {
+        let mut thumbnail_file = match size {
+            ThumbnailSize::Small => self.archive.by_name(THUMBNAIL_SMALL)?,
+            ThumbnailSize::Large => self.archive.by_name(THUMBNAIL_LARGE)?,
+        };
 
         let mut ret: Vec<u8> = Vec::new();
 

@@ -1,0 +1,16 @@
+name: Branch Deleted
+on:
+  delete:
+  workflow_call:
+  workflow_dispatch:
+jobs:
+  delete:
+    if: github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.1.1
+      - name: Clean up
+        run: |
+          gh release delete "BRANCH_${{ github.event.ref }}" -y --cleanup-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
