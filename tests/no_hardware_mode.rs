@@ -43,16 +43,10 @@ fn no_hardware_mode() {
     let temp_fb = temp_dir.path().join("mockFb");
     fs::File::create(&temp_fb).expect("Unable to generate mock FrameBuffer file");
 
-
-    //let temp_config = tempfile::Builder::new();
-
     log::info!("Write frames to {}", temp_fb.display());
 
     let (serial_read_sender, serial_read_receiver) = broadcast::channel(200);
     let (serial_write_sender, serial_write_receiver) = broadcast::channel(200);
-
-//    let configuration =
-//        hardwareless_config(temp_fb.path().as_os_str().to_str().unwrap().to_owned());
 
     let mut configuration = Configuration::from_file(test_resource_path("default.yaml".to_owned())).expect("Config could not be parsed");
 
@@ -162,13 +156,3 @@ fn build_runtime() -> Runtime {
         .build()
         .expect("Unable to start Tokio runtime")
 }
-/*
-fn hardwareless_config(framebuffer_filename: String) -> Configuration {
-    let mut default_config = common::default_test_configuration();
-
-    default_config.display.frame_buffer = framebuffer_filename;
-    default_config.printer.serial = String::from("n/a");
-
-    default_config
-}
-*/

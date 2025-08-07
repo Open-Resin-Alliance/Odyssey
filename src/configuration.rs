@@ -1,7 +1,7 @@
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use std::{error::Error, fmt::Debug, fs, io, sync::Arc, time::SystemTime};
+use std::{error::Error, fmt::Debug, fs, io, sync::Arc};
 use optional_struct::*;
 
 #[optional_struct(UpdatePrinterConfig)]
@@ -101,19 +101,14 @@ impl Configuration {
 
         let timestamp = std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH)?.as_secs();
 
-        log::warn!("checking {} for existing file", config_file);
+        log::info!("Writing config to {}", config_file);
 
         if fs::exists(config_file)? {
-            log::warn!("{} exists", config_file);
-            fs::rename(config_file, format!("{}.{}.old",config_file,timestamp)).map_err(|err| io::Error::new(err.kind(), format!("Unable to backup existing config file {:?}", err)))?;
+            let old_config = format!("{}.{}.old",config_file,timestamp);
+            log::info!("Moving existing config file to {}", old_config);
+            fs::rename(config_file, old_config).map_err(|err| io::Error::new(err.kind(), format!("Unable to backup existing config file {:?}", err)))?;
         }
-
-        //fs::exists(config_file).and_then(|_| fs::rename(config_file, format!("{}.{}",timestamp,config_file)))?;
-
         
-        log::warn!("overwriting file {} with new content", config_file);
-
-
         fs::write(config_file, content)?;
 
         Ok(())
