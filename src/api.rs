@@ -14,11 +14,7 @@ use poem::{
     error::{
         BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented,
         ServiceUnavailable, Unauthorized,
-    },
-    listener::TcpListener,
-    middleware::Cors,
-    web::Data,
-    EndpointExt, Result, Route, Server,
+    }, http::StatusCode, listener::TcpListener, middleware::Cors, web::Data, EndpointExt, Response, Result, Route, Server
 };
 use poem_openapi::{
     param::Query,
@@ -33,13 +29,14 @@ use tokio::{
     time::interval,
 };
 use tokio_util::sync::CancellationToken;
+use optional_struct::Applicable;
 
 use crate::{
     api_objects::{
         DisplayTest, FileMetadata, LocationCategory, PhysicalState, PrintMetadata, PrinterState,
         PrinterStatus, ThumbnailSize,
     },
-    configuration::{ApiConfig, Configuration},
+    configuration::{ApiConfig, Configuration, UpdateConfiguration},
     printer::Operation,
     printfile::PrintFile,
     sl1::Sl1,
@@ -136,6 +133,14 @@ impl Api {
     #[oai(path = "/config", method = "get")]
     async fn get_config(&self, Data(full_config): Data<&Configuration>) -> Json<Configuration> {
         Json(full_config.clone())
+    }
+
+    #[oai(path = "/config", method = "patch")]
+    async fn patch_config(&self, Data(full_config): Data<&Configuration>, Json(patch_config): Json<UpdateConfiguration>) -> Result<Json<Configuration>> {
+        let ammend_config = patch_config.build(full_config.clone());
+        Configuration::overwrite_file(&ammend_config)?;
+        
+        Ok(Json(ammend_config))
     }
 
     #[oai(path = "/manual", method = "post")]
@@ -612,6 +617,10 @@ pub async fn start_api(
         .data(state_ref.clone())
         .data(full_config.clone())
         .data(configuration.clone())
+        .catch_all_error(|err| async move {
+            log::error!("{}",err);
+            Response::builder().status(err.status()).body(err.to_string())
+        })
         .with(Cors::new());
 
     Server::new(TcpListener::bind(addr))

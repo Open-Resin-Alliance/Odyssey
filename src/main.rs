@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use clap::Parser;
 
@@ -6,13 +6,13 @@ use serialport::{ClearBuffer, SerialPort};
 use simple_logger::SimpleLogger;
 use tokio::{
     runtime::{Builder, Runtime},
-    sync::{broadcast, mpsc},
+    sync::{broadcast, mpsc, RwLock},
 };
 
 use odyssey::{
     api,
     api_objects::PrinterState,
-    configuration::Configuration,
+    configuration::{Configuration,LockedConfig},
     display::PrintDisplay,
     gcode::Gcode,
     printer::{Operation, Printer},
@@ -42,7 +42,9 @@ fn main() {
 
     log::info!("Starting Odyssey");
 
-    let configuration = parse_config(args.config);
+    let configuration = parse_config(args.config.clone());
+
+    let locked_config: LockedConfig = Arc::new(RwLock::new(parse_config(args.config)));
 
     let mut serial = tokio_serial::new(
         configuration.printer.serial.clone(),
@@ -62,12 +64,12 @@ fn main() {
     let (serial_write_sender, serial_write_receiver) = broadcast::channel(200);
 
     let gcode = Gcode::new(
-        configuration.clone(),
+        &configuration.gcode,
         serial_read_receiver,
         serial_write_sender,
     );
 
-    let display: PrintDisplay = PrintDisplay::new(configuration.display.clone());
+    let display: PrintDisplay = PrintDisplay::new(&configuration.display);
 
     let operation_channel = mpsc::channel::<Operation>(100);
     let status_channel = broadcast::channel::<PrinterState>(100);
