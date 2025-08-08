@@ -10,11 +10,16 @@ use std::{
 
 use glob::glob;
 use itertools::Itertools;
+use optional_struct::Applicable;
 use poem::{
     error::{
         BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented,
         ServiceUnavailable, Unauthorized,
-    }, listener::TcpListener, middleware::Cors, web::Data, EndpointExt, Response, Result, Route, Server
+    },
+    listener::TcpListener,
+    middleware::Cors,
+    web::Data,
+    EndpointExt, Response, Result, Route, Server,
 };
 use poem_openapi::{
     param::Query,
@@ -29,7 +34,6 @@ use tokio::{
     time::interval,
 };
 use tokio_util::sync::CancellationToken;
-use optional_struct::Applicable;
 
 use crate::{
     api_objects::{
@@ -136,10 +140,14 @@ impl Api {
     }
 
     #[oai(path = "/config", method = "patch")]
-    async fn patch_config(&self, Data(full_config): Data<&Configuration>, Json(patch_config): Json<UpdateConfiguration>) -> Result<Json<Configuration>> {
+    async fn patch_config(
+        &self,
+        Data(full_config): Data<&Configuration>,
+        Json(patch_config): Json<UpdateConfiguration>,
+    ) -> Result<Json<Configuration>> {
         let ammend_config = patch_config.build(full_config.clone());
         Configuration::overwrite_file(&ammend_config)?;
-        
+
         Ok(Json(ammend_config))
     }
 
@@ -618,8 +626,10 @@ pub async fn start_api(
         .data(full_config.clone())
         .data(configuration.clone())
         .catch_all_error(|err| async move {
-            log::error!("{}",err);
-            Response::builder().status(err.status()).body(err.to_string())
+            log::error!("{}", err);
+            Response::builder()
+                .status(err.status())
+                .body(err.to_string())
         })
         .with(Cors::new());
 

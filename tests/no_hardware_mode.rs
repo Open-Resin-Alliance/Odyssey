@@ -1,5 +1,6 @@
 use std::{fs, time::Duration};
 
+use crate::common::test_resource_path;
 use odyssey::{
     api,
     api_objects::PrinterState,
@@ -19,7 +20,6 @@ use tokio::{
     time::interval,
 };
 use tokio_util::sync::CancellationToken;
-use crate::common::test_resource_path;
 
 mod common;
 
@@ -47,7 +47,8 @@ fn no_hardware_mode() {
     let (serial_read_sender, serial_read_receiver) = broadcast::channel(200);
     let (serial_write_sender, serial_write_receiver) = broadcast::channel(200);
 
-    let mut configuration = Configuration::from_file(test_resource_path("default.yaml".to_owned())).expect("Config could not be parsed");
+    let mut configuration = Configuration::from_file(test_resource_path("default.yaml".to_owned()))
+        .expect("Config could not be parsed");
 
     configuration.display.frame_buffer = temp_fb.as_os_str().to_str().unwrap().to_owned();
     configuration.config_file = Some(temp_config.as_os_str().to_str().unwrap().to_owned());
