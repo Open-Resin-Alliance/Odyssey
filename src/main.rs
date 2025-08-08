@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::str::FromStr;
 
 use clap::Parser;
 
@@ -6,13 +6,13 @@ use serialport::{ClearBuffer, SerialPort};
 use simple_logger::SimpleLogger;
 use tokio::{
     runtime::{Builder, Runtime},
-    sync::{broadcast, mpsc, RwLock},
+    sync::{broadcast, mpsc},
 };
 
 use odyssey::{
     api,
     api_objects::PrinterState,
-    configuration::{Configuration,LockedConfig},
+    configuration::Configuration,
     display::PrintDisplay,
     gcode::Gcode,
     printer::{Operation, Printer},
@@ -33,7 +33,7 @@ struct Args {
 fn main() {
     let shutdown_handler = ShutdownHandler::new();
 
-    let args = parse_cli();
+    let args = Args::parse();
 
     SimpleLogger::new()
         .with_level(log::LevelFilter::from_str(&args.loglevel).expect("Unable to parse loglevel"))
@@ -42,9 +42,8 @@ fn main() {
 
     log::info!("Starting Odyssey");
 
-    let configuration = parse_config(args.config.clone());
-
-    let locked_config: LockedConfig = Arc::new(RwLock::new(parse_config(args.config)));
+    let configuration = Configuration::from_file(args.config)
+        .expect("Config could not be parsed. See example odyssey.yaml for expected fields:");
 
     let mut serial = tokio_serial::new(
         configuration.printer.serial.clone(),
@@ -133,13 +132,4 @@ fn build_runtime() -> Runtime {
         .enable_io()
         .build()
         .expect("Unable to start Tokio runtime")
-}
-
-fn parse_cli() -> Args {
-    Args::parse()
-}
-
-fn parse_config(config_file: String) -> Configuration {
-    Configuration::from_file(config_file)
-        .expect("Config could not be parsed. See example odyssey.yaml for expected fields:")
 }

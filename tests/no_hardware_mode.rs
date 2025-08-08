@@ -1,6 +1,5 @@
 use std::{fs, time::Duration};
 
-use cross::temp;
 use odyssey::{
     api,
     api_objects::PrinterState,

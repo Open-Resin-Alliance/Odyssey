@@ -14,7 +14,7 @@ use poem::{
     error::{
         BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented,
         ServiceUnavailable, Unauthorized,
-    }, http::StatusCode, listener::TcpListener, middleware::Cors, web::Data, EndpointExt, Response, Result, Route, Server
+    }, listener::TcpListener, middleware::Cors, web::Data, EndpointExt, Response, Result, Route, Server
 };
 use poem_openapi::{
     param::Query,

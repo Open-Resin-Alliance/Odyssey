@@ -88,11 +88,11 @@ impl Configuration {
     pub fn overwrite_file(config: &Configuration) -> Result<(),Box<dyn Error + Send + Sync>> {
         
         if let Some(config_file) = &config.config_file.clone() {
-            return Configuration::write_to_file(config_file, config);
+            Configuration::write_to_file(config_file, config)
         }
         else {
             log::error!("Config destination unknown, unable to save changes");
-            return Err(io::Error::new(io::ErrorKind::NotFound, "config_file not set on Configuration struct").into());
+            Err(io::Error::new(io::ErrorKind::NotFound, "config_file not set on Configuration struct").into())
         }
     }
     pub fn write_to_file(config_file: &String, config: &Configuration) -> Result<(),Box<dyn Error + Send + Sync>> {
