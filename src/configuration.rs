@@ -56,7 +56,7 @@ pub struct Configuration {
 }
 
 impl Configuration {
-    pub fn load(config_file: String) -> Result<Self, ConfigError> {
+    pub fn from_file(config_file: String) -> Result<Self, ConfigError> {
         let s = Config::builder()
             .add_source(File::with_name(config_file.as_str()).required(true))
             .add_source(Environment::with_prefix("odyssey"))

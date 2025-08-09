@@ -32,6 +32,7 @@ use tokio::{
     sync::{broadcast, mpsc, RwLock},
     time::interval,
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     api_objects::{
@@ -575,6 +576,7 @@ pub async fn start_api(
     full_config: Configuration,
     operation_sender: mpsc::Sender<Operation>,
     state_receiver: broadcast::Receiver<PrinterState>,
+    cancellation_token: CancellationToken,
 ) {
     let state_ref = Arc::new(RwLock::new(PrinterState {
         print_data: None,
@@ -613,7 +615,11 @@ pub async fn start_api(
         .with(Cors::new());
 
     Server::new(TcpListener::bind(addr))
-        .run(app)
+        .run_with_graceful_shutdown(
+            app,
+            cancellation_token.clone().cancelled_owned(),
+            Option::None,
+        )
         .await
         .expect("Error encountered");
 }

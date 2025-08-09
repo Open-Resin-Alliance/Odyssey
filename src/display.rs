@@ -52,7 +52,7 @@ impl PrintDisplay {
         let mut new_buffer: Vec<u8> = Vec::new();
 
         buffer
-            .chunks_exact(pixels_per_chunk.into())
+            .chunks_exact(pixels_per_chunk)
             .for_each(|pixel_chunk| {
                 // raw binary chunk of pixels, to be broken into bytes and repacked in the Vector later
                 let mut raw_chunk = 0b0;
@@ -63,7 +63,7 @@ impl PrintDisplay {
 
                     // Truncate the pixel data to the display's bit depth, then shift it into place in the raw chunk
                     let shifted_pixel: u64 =
-                        ((pixel_chunk[i as usize] as u64) >> depth_difference) << (pos_shift);
+                        ((pixel_chunk[i] as u64) >> depth_difference) << (pos_shift);
                     raw_chunk |= shifted_pixel;
                 }
 

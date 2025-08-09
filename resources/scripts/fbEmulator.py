@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
-import os
+import glob
 import pygame
-import io
 
-fifo_path = "/tmp/emulatedFramebuffer"
+fifo_path = glob.glob("/tmp/odysseyTest*")[0]
 mode = 0o600
-
-try:
-    os.mkfifo(fifo_path, mode=mode)
-except OSError as e:
-    print("FIFO creation error:", e)
-    print("Continuing.")
 
 real_bit_depth=[5,6,5]
 
@@ -23,7 +16,7 @@ fake_bit_depth=8
 #zoom_ratio=1
 
 sliced_x, sliced_y = (192,108)
-zoom_ratio=10
+zoom_ratio=1
 
 
 print(f"Rendering a screen {sliced_x*zoom_ratio}x{sliced_y*zoom_ratio}")
@@ -43,6 +36,7 @@ print(pygame.display.Info())
 frame_size=int((sliced_x*sliced_y)*(bytes_per_pixelgroup/len(real_bit_depth)))
 
 with open(fifo_path, mode='rb', buffering=frame_size) as efb:
+    efb.read()
     while True:
         if efb.readable():
             data = efb.read()

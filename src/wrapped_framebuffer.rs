@@ -5,9 +5,6 @@ use framebuffer::Framebuffer;
 // Wrap the real framebuffer in this, with a corresponding write call
 // If none, write to file at given path instead, so we can pretend it's real
 // and examine the output manually if we like
-
-// Make python script to read the output and structure it in a graphical window
-// emulating the display itself
 pub struct WrappedFramebuffer {
     pub frame_buffer: Option<Framebuffer>,
     pub fb_path: String,
