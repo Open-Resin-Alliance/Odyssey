@@ -25,50 +25,50 @@ jobs:
         with:
           rustflags: "-Awarnings"
 
-      - name: Compile, Copy, and Compress armv7
+      - name: Compile, Copy, and Compress armv7-unknown-linux-gnueabihf
         run: |
-          BUILD_NAME=odyssey_armv7
+          BUILD_NAME=odyssey_armv7-unknown-linux-gnueabihf
           cargo build --release --target armv7-unknown-linux-gnueabihf
           mkdir $BUILD_NAME
           mv target/armv7-unknown-linux-gnueabihf/release/odyssey $BUILD_NAME
           cp resources/default.yaml $BUILD_NAME
           tar -czvf $BUILD_NAME.tar.gz -C $BUILD_NAME odyssey default.yaml
       
-      - name: upload armv7 artifact
+      - name: upload armv7-unknown-linux-gnueabihf artifact
         uses: actions/upload-artifact@v4.3.1
         with:
-          name: odyssey_armv7
-          path: odyssey_armv7/*
+          name: odyssey_armv7-unknown-linux-gnueabihf
+          path: odyssey_armv7-unknown-linux-gnueabihf/*
           
-      - name: Compile, Copy, and Compress aarch64
+      - name: Compile, Copy, and Compress aarch64-unknown-linux-gnu
         run: |
-          BUILD_NAME=odyssey_aarch64
+          BUILD_NAME=odyssey_aarch64-unknown-linux-gnu
           cargo build --release --target aarch64-unknown-linux-gnu
           mkdir $BUILD_NAME
           mv target/aarch64-unknown-linux-gnu/release/odyssey $BUILD_NAME
           cp resources/default.yaml $BUILD_NAME
           tar -czvf $BUILD_NAME.tar.gz -C $BUILD_NAME odyssey default.yaml
       
-      - name: upload aarch64 artifact
+      - name: upload aarch64-unknown-linux-gnu artifact
         uses: actions/upload-artifact@v4.3.1
         with:
-          name: odyssey_aarch64
-          path: odyssey_aarch64/*
+          name: odyssey_aarch64-unknown-linux-gnu
+          path: odyssey_aarch64-unknown-linux-gnu/*
           
-      - name: Compile, Copy, and Compress x86_64
+      - name: Compile, Copy, and Compress x86_64-unknown-linux-gnu
         run: |
-          BUILD_NAME=odyssey_x86_64
+          BUILD_NAME=odyssey_x86_64-unknown-linux-gnu
           cargo build --release --target x86_64-unknown-linux-gnu
           mkdir $BUILD_NAME
           mv target/x86_64-unknown-linux-gnu/release/odyssey $BUILD_NAME
           cp resources/default.yaml $BUILD_NAME
           tar -czvf $BUILD_NAME.tar.gz -C $BUILD_NAME odyssey default.yaml
       
-      - name: upload x86_64 artifact
+      - name: upload x86_64-unknown-linux-gnu artifact
         uses: actions/upload-artifact@v4.3.1
         with:
-          name: odyssey_x86_64
-          path: odyssey_x86_64/*
+          name: odyssey_x86_64-unknown-linux-gnu
+          path: odyssey_x86_64-unknown-linux-gnu/*
 
       - uses: ncipollo/release-action@v1.14.0
         if: github.ref == 'refs/heads/main'

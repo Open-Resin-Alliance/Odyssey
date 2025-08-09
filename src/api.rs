@@ -12,8 +12,8 @@ use glob::glob;
 use itertools::Itertools;
 use poem::{
     error::{
-        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented,
-        ServiceUnavailable, Unauthorized,
+        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotFound,
+        NotFoundError, NotImplemented, ServiceUnavailable, Unauthorized,
     },
     listener::TcpListener,
     middleware::Cors,
@@ -26,6 +26,7 @@ use poem_openapi::{
     types::multipart::Upload,
     Multipart, Object, OpenApi, OpenApiService,
 };
+use self_update::update::Release;
 use serde::{Deserialize, Serialize};
 use tokio::{
     fs,
@@ -37,12 +38,13 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     api_objects::{
         DisplayTest, FileMetadata, LocationCategory, PhysicalState, PrintMetadata, PrinterState,
-        PrinterStatus, ThumbnailSize,
+        PrinterStatus, ReleaseVersion, ThumbnailSize,
     },
     configuration::{ApiConfig, Configuration},
     printer::Operation,
     printfile::PrintFile,
     sl1::Sl1,
+    updates,
 };
 
 #[derive(Debug, Multipart)]
@@ -136,6 +138,27 @@ impl Api {
     #[oai(path = "/config", method = "get")]
     async fn get_config(&self, Data(full_config): Data<&Configuration>) -> Json<Configuration> {
         Json(full_config.clone())
+    }
+
+    #[oai(path = "/update/releases", method = "get")]
+    async fn get_releases(&self) -> Result<Json<Vec<ReleaseVersion>>> {
+        Ok(Json(
+            updates::get_releases()?
+                .iter()
+                .map(|rel| ReleaseVersion {
+                    name: rel.name.clone(),
+                    version: rel.version.clone(),
+                    date: rel.date.clone(),
+                    body: rel.body.clone(),
+                })
+                .collect_vec(),
+        ))
+    }
+
+    #[oai(path = "/update", method = "post")]
+    async fn update(&self,
+        Query(release): Query<String>,) -> Result<()> {
+       Ok(updates::update(release)?)
     }
 
     #[oai(path = "/manual", method = "post")]

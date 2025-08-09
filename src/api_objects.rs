@@ -1,4 +1,5 @@
-use poem_openapi::{Enum, Object};
+use poem_openapi::{types::ToJSON, Enum, Object};
+use self_update::update::Release;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Enum)]
@@ -68,4 +69,12 @@ pub enum DisplayTest {
     Blank,
     Grid,
     Dimensions,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Object)]
+pub struct ReleaseVersion {
+    pub name: String,
+    pub version: String,
+    pub date: String,
+    pub body: Option<String>,
 }
