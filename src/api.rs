@@ -4,10 +4,12 @@ use std::{
     io::{Error, ErrorKind, Read, Write},
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
+    pin::Pin,
     sync::Arc,
     time::{Duration, UNIX_EPOCH},
 };
 
+use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use glob::glob;
 use itertools::Itertools;
 use poem::{
@@ -17,13 +19,13 @@ use poem::{
     },
     listener::TcpListener,
     middleware::Cors,
-    web::Data,
+    web::{sse::Event, Data},
     EndpointExt, Result, Route, Server,
 };
 use poem_openapi::{
     param::Query,
-    payload::{Attachment, Json},
-    types::multipart::Upload,
+    payload::{Attachment, EventStream, Json},
+    types::{multipart::Upload, ToJSON},
     Multipart, Object, OpenApi, OpenApiService,
 };
 use serde::{Deserialize, Serialize};
@@ -32,7 +34,9 @@ use tokio::{
     sync::{broadcast, mpsc, RwLock},
     time::interval,
 };
+use tokio_stream::wrappers::BroadcastStream;
 use tokio_util::sync::CancellationToken;
+use tracing::instrument;
 
 use crate::{
     api_objects::{
@@ -60,6 +64,7 @@ pub struct FilesResponse {
 const DEFAULT_PAGE_INDEX: usize = 0;
 const DEFAULT_PAGE_SIZE: usize = 100;
 
+#[derive(Debug)]
 struct Api;
 
 #[OpenApi]
@@ -84,6 +89,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
+    #[instrument]
     #[oai(path = "/print/pause", method = "post")]
     async fn pause_print(
         &self,
@@ -95,6 +101,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
+    #[instrument]
     #[oai(path = "/print/resume", method = "post")]
     async fn resume_print(
         &self,
@@ -106,6 +113,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
+    #[instrument]
     #[oai(path = "/print/cancel", method = "post")]
     async fn cancel_print(
         &self,
@@ -117,6 +125,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
+    #[instrument]
     #[oai(path = "/shutdown", method = "post")]
     async fn shutdown(&self, Data(operation_sender): Data<&mpsc::Sender<Operation>>) -> Result<()> {
         operation_sender
@@ -124,7 +133,7 @@ impl Api {
             .await
             .map_err(ServiceUnavailable)
     }
-
+    #[instrument]
     #[oai(path = "/status", method = "get")]
     async fn get_status(
         &self,
@@ -133,11 +142,52 @@ impl Api {
         Json(state_ref.read().await.clone())
     }
 
+    #[instrument]
+    #[oai(path = "/status/stream", method = "get")]
+    async fn status_stream(
+        &self,
+        Data(state_receiver): Data<&Arc<broadcast::Receiver<PrinterState>>>,
+    ) -> EventStream<BoxStream<'static, PrinterState>> {
+        let event_stream = EventStream::new(Api::_status_stream(state_receiver))//.keep_alive(Duration::from_secs(15))
+            /*.to_event(|status| 
+                Event::message(status.to_json_string()).event_type("push")
+            );*/;
+
+        tracing::info!("build status event_stream");
+        event_stream
+    }
+
+    fn _status_stream(
+        state_receiver: &Arc<broadcast::Receiver<PrinterState>>,
+    ) -> BoxStream<'static, PrinterState> {
+        let stream = Box::pin(
+            BroadcastStream::new(state_receiver.resubscribe()).filter_map(
+                |status_result| async move {
+                    tracing::info!("{:?}", status_result);
+                    status_result
+                        .clone()
+                        .map_err(|err| {
+                            tracing::error!(
+                                "Failed to retrieve printer state for /status/stream\n{}",
+                                err
+                            );
+                            err
+                        })
+                        .ok()
+                },
+            ).take(1)
+        );
+        tracing::info!("built status stream");
+        stream
+    }
+
+    #[instrument]
     #[oai(path = "/config", method = "get")]
     async fn get_config(&self, Data(full_config): Data<&Configuration>) -> Json<Configuration> {
         Json(full_config.clone())
     }
 
+    #[instrument(skip(z,cure))]
     #[oai(path = "/manual", method = "post")]
     async fn manual_control(
         &self,
@@ -164,7 +214,7 @@ impl Api {
 
         Ok(())
     }
-
+    #[instrument]
     #[oai(path = "/manual/home", method = "post")]
     async fn manual_home(
         &self,
@@ -178,7 +228,7 @@ impl Api {
 
         Ok(())
     }
-
+    #[instrument]
     #[oai(path = "/manual/hardware_command", method = "post")]
     async fn manual_command(
         &self,
@@ -193,7 +243,7 @@ impl Api {
 
         Ok(())
     }
-
+    #[instrument]
     #[oai(path = "/manual/display_test", method = "post")]
     async fn manual_display_test(
         &self,
@@ -206,7 +256,7 @@ impl Api {
             .map_err(ServiceUnavailable)?;
         Ok(())
     }
-
+    #[instrument]
     #[oai(path = "/manual/display_layer", method = "post")]
     async fn manual_display_layer(
         &self,
@@ -227,14 +277,14 @@ impl Api {
             .await
             .map_err(ServiceUnavailable)
     }
-
+    #[instrument]
     #[oai(path = "/files", method = "post")]
     async fn upload_file(
         &self,
         file_upload: UploadPayload,
         Data(configuration): Data<&ApiConfig>,
     ) -> Result<()> {
-        log::info!("Uploading file");
+        tracing::info!("Uploading file");
 
         let file_name = file_upload
             .file
@@ -251,7 +301,7 @@ impl Api {
 
         Ok(())
     }
-
+    #[instrument]
     #[oai(path = "/files", method = "get")]
     async fn get_files(
         &self,
@@ -265,7 +315,7 @@ impl Api {
         let page_index = page_index.unwrap_or(DEFAULT_PAGE_INDEX);
         let page_size = page_size.unwrap_or(DEFAULT_PAGE_SIZE);
 
-        log::info!(
+        tracing::info!(
             "Getting files in location={:?}, subdirectory={:?}, page_index={:?}, page_size={:?}",
             location,
             subdirectory,
@@ -360,7 +410,7 @@ impl Api {
         file_path: &str,
         location: &LocationCategory,
     ) -> Result<PathBuf> {
-        log::info!("Getting full file path {:?}, {:?}", location, file_path);
+        tracing::info!("Getting full file path {:?}, {:?}", location, file_path);
 
         match location {
             LocationCategory::Usb => Api::get_usb_file_path(configuration, file_path),
@@ -400,7 +450,7 @@ impl Api {
         location: &LocationCategory,
         configuration: &ApiConfig,
     ) -> Result<FileMetadata> {
-        log::info!("Getting file data");
+        tracing::info!("Getting file data");
         let modified_time = target_file
             .metadata()
             .ok()
@@ -442,11 +492,11 @@ impl Api {
         configuration: &ApiConfig,
     ) -> Result<PrintMetadata> {
         let file_data = Api::_get_filedata(target_file, location, configuration)?;
-        log::info!("Extracting print metadata");
+        tracing::info!("Extracting print metadata");
 
         Ok(Sl1::from_file(file_data).get_metadata())
     }
-
+    #[instrument]
     #[oai(path = "/file", method = "get")]
     async fn get_file(
         &self,
@@ -456,7 +506,7 @@ impl Api {
     ) -> Result<Attachment<Vec<u8>>> {
         let location = location.unwrap_or(LocationCategory::Local);
 
-        log::info!("Getting file {:?} in {:?}", file_path, location);
+        tracing::info!("Getting file {:?} in {:?}", file_path, location);
 
         let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
 
@@ -477,7 +527,7 @@ impl Api {
 
         Ok(Attachment::new(data).filename(file_name))
     }
-
+    #[instrument]
     #[oai(path = "/file/metadata", method = "get")]
     async fn get_file_metadata(
         &self,
@@ -487,7 +537,7 @@ impl Api {
     ) -> Result<Json<PrintMetadata>> {
         let location = location.unwrap_or(LocationCategory::Local);
 
-        log::info!(
+        tracing::info!(
             "Getting file metadata from {:?} in {:?}",
             file_path,
             location
@@ -501,6 +551,7 @@ impl Api {
         )?))
     }
 
+    #[instrument]
     #[oai(path = "/file/thumbnail", method = "get")]
     async fn get_thumbnail(
         &self,
@@ -512,11 +563,11 @@ impl Api {
         let location = location.unwrap_or(LocationCategory::Local);
         let size = size.unwrap_or(ThumbnailSize::Small);
 
-        log::info!("Getting thumbnail from {:?} in {:?}", file_path, location);
+        tracing::info!("Getting thumbnail from {:?} in {:?}", file_path, location);
         let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
 
         let file_metadata = Api::_get_filedata(full_file_path, &location, configuration)?;
-        log::info!("Extracting print thumbnail");
+        tracing::info!("Extracting print thumbnail");
 
         let file_data = Sl1::from_file(file_metadata)
             .get_thumbnail(size)
@@ -525,6 +576,7 @@ impl Api {
         Ok(Attachment::new(file_data.data).filename(file_data.name))
     }
 
+    #[instrument]
     #[oai(path = "/file", method = "delete")]
     async fn delete_file(
         &self,
@@ -533,7 +585,7 @@ impl Api {
         Data(configuration): Data<&ApiConfig>,
     ) -> Result<Json<FileMetadata>> {
         let location = location.unwrap_or(LocationCategory::Local);
-        log::info!("Deleting file {:?} in {:?}", file_path, location);
+        tracing::info!("Deleting file {:?} in {:?}", file_path, location);
 
         let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
 
@@ -592,7 +644,10 @@ pub async fn start_api(
 
     let configuration = full_config.api.clone();
 
-    tokio::spawn(run_state_listener(state_receiver, state_ref.clone()));
+    tokio::spawn(run_state_listener(
+        state_receiver.resubscribe(),
+        state_ref.clone(),
+    ));
 
     let port = configuration.port.to_string();
     let addr = format!("0.0.0.0:{port}");
@@ -609,6 +664,7 @@ pub async fn start_api(
 
     let app = app
         .data(operation_sender)
+        .data(Arc::new(state_receiver))
         .data(state_ref.clone())
         .data(full_config.clone())
         .data(configuration.clone())

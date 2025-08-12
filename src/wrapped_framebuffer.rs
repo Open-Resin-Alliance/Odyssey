@@ -16,7 +16,7 @@ impl WrappedFramebuffer {
         match self.frame_buffer.as_mut() {
             Some(fb) => fb.write_frame(frame),
             None => {
-                log::info!("Writing layer to path: {}", self.fb_path);
+                tracing::info!("Writing layer to path: {}", self.fb_path);
                 match OpenOptions::new()
                     .append(true)
                     .open(self.fb_path.clone())
@@ -25,7 +25,7 @@ impl WrappedFramebuffer {
                     Ok(output_file) => {
                         let _ = output_file.write_all(frame);
                     }
-                    Err(e) => log::error!("Error while writing layer: {}", e),
+                    Err(e) => tracing::error!("Error while writing layer: {}", e),
                 }
             }
         }

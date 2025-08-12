@@ -57,7 +57,7 @@ impl Gcode {
 
     async fn send_gcode(&mut self, code: String) -> std::io::Result<()> {
         let parsed_code = self.parse_gcode(code) + "\r\n";
-        log::debug!("Executing gcode: {}", parsed_code.trim_end());
+        tracing::debug!("Executing gcode: {}", parsed_code.trim_end());
 
         self.serial_sender
             .send(parsed_code)
@@ -73,13 +73,13 @@ impl Gcode {
         response: String,
         timeout_seconds: usize,
     ) -> std::io::Result<()> {
-        log::trace!("Expecting response: {}", response);
+        tracing::trace!("Expecting response: {}", response);
         let mut interval = interval(Duration::from_millis(100));
         let intervals = 10 * timeout_seconds;
 
         for _ in 0..intervals {
             if self.check_response(&response).await {
-                log::trace!("Expected response received");
+                tracing::trace!("Expected response received");
                 return Ok(());
             } else {
                 interval.tick().await;

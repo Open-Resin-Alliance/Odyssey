@@ -9,7 +9,6 @@ use odyssey::{
     printer::{Operation, Printer},
     shutdown_handler::ShutdownHandler,
 };
-use simple_logger::SimpleLogger;
 use tokio::{
     runtime::{Builder, Runtime},
     sync::{
@@ -19,6 +18,7 @@ use tokio::{
     time::interval,
 };
 use tokio_util::sync::CancellationToken;
+use tracing::Level;
 
 mod common;
 
@@ -30,17 +30,15 @@ mod common;
 fn no_hardware_mode() {
     let shutdown_handler = ShutdownHandler::new();
 
-    SimpleLogger::new()
-        .with_level(log::LevelFilter::Debug)
-        .init()
-        .unwrap();
+
+    tracing_subscriber::fmt().with_max_level(Level::TRACE).init();
 
     let tmp_file = tempfile::Builder::new()
         .prefix("odysseyTest")
         .tempfile()
         .expect("Unable to make temporary file");
 
-    log::info!("Write frames to {}", tmp_file.path().display());
+    tracing::info!("Write frames to {}", tmp_file.path().display());
 
     let (serial_read_sender, serial_read_receiver) = broadcast::channel(200);
     let (serial_write_sender, serial_write_receiver) = broadcast::channel(200);
@@ -95,7 +93,7 @@ fn no_hardware_mode() {
         let _ = api_handle.await;
 
         tmp_file.close().expect("Unable to remove tempdir");
-        log::info!("Shutting down");
+        tracing::info!("Shutting down");
     });
 
     runtime.shutdown_background();
@@ -116,7 +114,7 @@ pub async fn serial_feedback_loop(
         interval.tick().await;
         match receiver.try_recv() {
             Ok(command) => {
-                log::info!("{}", command);
+                tracing::info!("{}", command);
 
                 let response: String;
                 if command.as_str().trim() == configuration.gcode.status_check.as_str().trim() {
@@ -125,7 +123,7 @@ pub async fn serial_feedback_loop(
                     response = configuration.gcode.move_sync.clone();
                 };
 
-                log::info!("command='{}', response='{}'", command.trim(), response);
+                tracing::info!("command='{}', response='{}'", command.trim(), response);
 
                 sender
                     .send(response)

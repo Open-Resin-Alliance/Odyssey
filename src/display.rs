@@ -47,7 +47,7 @@ impl PrintDisplay {
 
         let chunk_size: u8 = self.config.bit_depth.iter().sum(); //8
         let pixels_per_chunk = self.config.bit_depth.len(); //1
-        log::info!("Re-encoding frame with bit-depth {} into {} pixels in {} bits, with the following bit layout: {:?}", bit_depth, pixels_per_chunk, chunk_size, self.config.bit_depth);
+        tracing::info!("Re-encoding frame with bit-depth {} into {} pixels in {} bits, with the following bit layout: {:?}", bit_depth, pixels_per_chunk, chunk_size, self.config.bit_depth);
 
         let mut new_buffer: Vec<u8> = Vec::new();
 

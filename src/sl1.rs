@@ -78,7 +78,7 @@ pub struct Sl1 {
 impl PrintFile for Sl1 {
     /// Instantiate the Sl1 from the given file
     fn from_file(file_data: FileMetadata) -> Sl1 {
-        log::info!("Loading PrintFile from SL1 {:?}", file_data);
+        tracing::info!("Loading PrintFile from SL1 {:?}", file_data);
 
         let full_path = Path::new(file_data.parent_path.as_str()).join(file_data.path.as_str());
 
