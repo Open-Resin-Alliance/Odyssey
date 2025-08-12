@@ -175,7 +175,7 @@ impl Api {
                         })
                         .ok()
                 },
-            ).take(1)
+            )
         );
         tracing::info!("built status stream");
         stream
