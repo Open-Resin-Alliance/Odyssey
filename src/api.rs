@@ -161,7 +161,7 @@ impl Api {
         state_receiver: &Arc<broadcast::Receiver<PrinterState>>,
     ) -> BoxStream<'static, PrinterState> {
         let stream = Box::pin(
-            BroadcastStream::new(state_receiver.resubscribe()).filter_map(
+            BroadcastStream::new(state_receiver.resubscribe())/* .filter_map(
                 |status_result| async move {
                     tracing::info!("{:?}", status_result);
                     status_result
@@ -175,7 +175,8 @@ impl Api {
                         })
                         .ok()
                 },
-            )
+            ).take(1)*/
+            .filter_map(|result| async{result.ok()})
         );
         tracing::info!("built status stream");
         stream
