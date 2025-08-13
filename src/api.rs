@@ -9,7 +9,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 
-use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use futures::{stream::BoxStream};
 use glob::glob;
 use itertools::Itertools;
 use poem::{
@@ -34,7 +34,7 @@ use tokio::{
     sync::{broadcast, mpsc, RwLock},
     time::interval,
 };
-use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
@@ -141,19 +141,6 @@ impl Api {
     ) -> Json<PrinterState> {
         Json(state_ref.read().await.clone())
     }
-    
-     #[oai(path = "/events", method = "get")]
-    async fn index(&self) -> EventStream<BoxStream<'static, String>> {
-        EventStream::new(
-            async_stream::stream! {
-                for i in 0.. {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                    yield "wa".to_string();
-                }
-            }
-            .boxed(),
-        )
-    }
 
     #[instrument]
     #[oai(path = "/status/stream", method = "get")]
@@ -189,7 +176,7 @@ impl Api {
                         .ok()
                 },
             ).take(1)*/
-            .filter_map(|result| async{result.ok()})
+            .filter_map(|result| result.ok())
         );
         tracing::info!("built status stream");
         stream
