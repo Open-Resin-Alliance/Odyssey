@@ -9,7 +9,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 
-use futures::{stream::BoxStream};
+use futures::{stream::BoxStream, StreamExt, TryStreamExt};
 use glob::glob;
 use itertools::Itertools;
 use poem::{
@@ -34,7 +34,7 @@ use tokio::{
     sync::{broadcast, mpsc, RwLock},
     time::interval,
 };
-use tokio_stream::{wrappers::BroadcastStream, StreamExt};
+use tokio_stream::wrappers::BroadcastStream;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
@@ -176,10 +176,10 @@ impl Api {
                         .ok()
                 },
             ).take(1)*/
-            .filter_map(|result| result.ok())
+            .filter_map(|result| async{result.ok()})
         );
         tracing::info!("built status stream");
-        stream
+        stream.boxed()
     }
 
     #[instrument]
