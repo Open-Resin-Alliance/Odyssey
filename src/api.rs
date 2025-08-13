@@ -16,11 +16,7 @@ use poem::{
     error::{
         BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented,
         ServiceUnavailable, Unauthorized,
-    },
-    listener::TcpListener,
-    middleware::Cors,
-    web::{sse::Event, Data},
-    EndpointExt, Result, Route, Server,
+    }, http::status, listener::TcpListener, middleware::Cors, web::{sse::Event, Data}, EndpointExt, Result, Route, Server
 };
 use poem_openapi::{
     param::Query,
@@ -147,11 +143,15 @@ impl Api {
     async fn status_stream(
         &self,
         Data(state_receiver): Data<&Arc<broadcast::Receiver<PrinterState>>>,
-    ) -> EventStream<BoxStream<'static, PrinterState>> {
-        let event_stream = EventStream::new(Api::_status_stream(state_receiver))//.keep_alive(Duration::from_secs(15))
-            /*.to_event(|status| 
-                Event::message(status.to_json_string()).event_type("push")
-            );*/;
+    ) -> EventStream<BoxStream<'static, Option<PrinterState>>> {
+        let event_stream = EventStream::new(Api::_status_stream(state_receiver)).keep_alive(Duration::from_secs(15))
+            .to_event(|status| 
+                match status {
+                    Some(status_update)=>Event::message(status_update.to_json_string()).event_type("push"),
+                    None => Event::Retry { retry: 1 },
+                }
+                
+            );
 
         tracing::info!("build status event_stream");
         event_stream
@@ -159,8 +159,8 @@ impl Api {
 
     fn _status_stream(
         state_receiver: &Arc<broadcast::Receiver<PrinterState>>,
-    ) -> BoxStream<'static, PrinterState> {
-        let stream = Box::pin(
+    ) -> BoxStream<'static, Option<PrinterState>> {
+        let stream =
             BroadcastStream::new(state_receiver.resubscribe())/* .filter_map(
                 |status_result| async move {
                     tracing::info!("{:?}", status_result);
@@ -176,8 +176,8 @@ impl Api {
                         .ok()
                 },
             ).take(1)*/
-            .filter_map(|result| async{result.ok()})
-        );
+            .map(|result| result.ok())
+        ;
         tracing::info!("built status stream");
         stream.boxed()
     }
@@ -655,7 +655,7 @@ pub async fn start_api(
 
     let api_service = OpenApiService::new(Api, "Odyssey API", "1.0");
 
-    let ui = api_service.swagger_ui();
+    let ui = api_service.redoc();
 
     let mut app = Route::new().nest("/", api_service);
 
