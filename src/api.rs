@@ -143,12 +143,12 @@ impl Api {
     }
     
      #[oai(path = "/events", method = "get")]
-    async fn index(&self) -> EventStream<BoxStream<'static, i32>> {
+    async fn index(&self) -> EventStream<BoxStream<'static, String>> {
         EventStream::new(
             async_stream::stream! {
                 for i in 0.. {
                     tokio::time::sleep(Duration::from_secs(1)).await;
-                    yield i;
+                    yield "wa".to_string();
                 }
             }
             .boxed(),
