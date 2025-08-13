@@ -141,6 +141,19 @@ impl Api {
     ) -> Json<PrinterState> {
         Json(state_ref.read().await.clone())
     }
+    
+     #[oai(path = "/events", method = "get")]
+    async fn index(&self) -> EventStream<BoxStream<'static, i32>> {
+        EventStream::new(
+            async_stream::stream! {
+                for i in 0.. {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    yield i;
+                }
+            }
+            .boxed(),
+        )
+    }
 
     #[instrument]
     #[oai(path = "/status/stream", method = "get")]
