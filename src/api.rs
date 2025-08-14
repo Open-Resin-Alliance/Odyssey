@@ -10,6 +10,7 @@ use std::{
 
 use glob::glob;
 use itertools::Itertools;
+use optional_struct::Applicable;
 use poem::{
     error::{
         BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotFound,
@@ -18,7 +19,7 @@ use poem::{
     listener::TcpListener,
     middleware::Cors,
     web::Data,
-    EndpointExt, Result, Route, Server,
+    EndpointExt, Response, Result, Route, Server,
 };
 use poem_openapi::{
     param::Query,
@@ -40,7 +41,7 @@ use crate::{
         DisplayTest, FileMetadata, LocationCategory, PhysicalState, PrintMetadata, PrinterState,
         PrinterStatus, ReleaseVersion, ThumbnailSize,
     },
-    configuration::{ApiConfig, Configuration},
+    configuration::{ApiConfig, Configuration, UpdateConfiguration},
     printer::Operation,
     printfile::PrintFile,
     sl1::Sl1,
@@ -138,6 +139,18 @@ impl Api {
     #[oai(path = "/config", method = "get")]
     async fn get_config(&self, Data(full_config): Data<&Configuration>) -> Json<Configuration> {
         Json(full_config.clone())
+    }
+
+    #[oai(path = "/config", method = "patch")]
+    async fn patch_config(
+        &self,
+        Data(full_config): Data<&Configuration>,
+        Json(patch_config): Json<UpdateConfiguration>,
+    ) -> Result<Json<Configuration>> {
+        let ammend_config = patch_config.build(full_config.clone());
+        Configuration::overwrite_file(&ammend_config)?;
+
+        Ok(Json(ammend_config))
     }
 
     #[oai(path = "/update/releases", method = "get")]
@@ -635,6 +648,12 @@ pub async fn start_api(
         .data(state_ref.clone())
         .data(full_config.clone())
         .data(configuration.clone())
+        .catch_all_error(|err| async move {
+            log::error!("{}", err);
+            Response::builder()
+                .status(err.status())
+                .body(err.to_string())
+        })
         .with(Cors::new());
 
     Server::new(TcpListener::bind(addr))

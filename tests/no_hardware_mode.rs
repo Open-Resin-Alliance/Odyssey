@@ -1,5 +1,6 @@
-use std::time::Duration;
+use std::{fs, time::Duration};
 
+use crate::common::test_resource_path;
 use odyssey::{
     api,
     api_objects::PrinterState,
@@ -35,26 +36,32 @@ fn no_hardware_mode() {
         .init()
         .unwrap();
 
-    let tmp_file = tempfile::Builder::new()
-        .prefix("odysseyTest")
-        .tempfile()
-        .expect("Unable to make temporary file");
+    let temp_dir = tempfile::TempDir::new().expect("Unable to create temp directory for test");
 
-    log::info!("Write frames to {}", tmp_file.path().display());
+    let temp_config = temp_dir.path().join("mockConfig.yaml");
+    let temp_fb = temp_dir.path().join("mockFb");
+    fs::File::create(&temp_fb).expect("Unable to generate mock FrameBuffer file");
+
+    log::info!("Write frames to {}", temp_fb.display());
 
     let (serial_read_sender, serial_read_receiver) = broadcast::channel(200);
     let (serial_write_sender, serial_write_receiver) = broadcast::channel(200);
 
-    let configuration =
-        hardwareless_config(tmp_file.path().as_os_str().to_str().unwrap().to_owned());
+    let mut configuration = Configuration::from_file(test_resource_path("default.yaml".to_owned()))
+        .expect("Config could not be parsed");
+
+    configuration.display.frame_buffer = temp_fb.as_os_str().to_str().unwrap().to_owned();
+    configuration.config_file = Some(temp_config.as_os_str().to_str().unwrap().to_owned());
+
+    Configuration::overwrite_file(&configuration).expect("Unable to save temporary config file");
 
     let gcode = Gcode::new(
-        configuration.clone(),
+        &configuration.gcode.clone(),
         serial_read_receiver,
         serial_write_sender,
     );
 
-    let display: PrintDisplay = PrintDisplay::new(configuration.display.clone());
+    let display: PrintDisplay = PrintDisplay::new(&configuration.display.clone());
 
     let operation_channel = mpsc::channel::<Operation>(100);
     let status_channel = broadcast::channel::<PrinterState>(100);
@@ -94,7 +101,7 @@ fn no_hardware_mode() {
         let _ = statemachine_handle.await;
         let _ = api_handle.await;
 
-        tmp_file.close().expect("Unable to remove tempdir");
+        temp_dir.close().expect("Unable to remove tempdir");
         log::info!("Shutting down");
     });
 
@@ -148,13 +155,4 @@ fn build_runtime() -> Runtime {
         .enable_io()
         .build()
         .expect("Unable to start Tokio runtime")
-}
-
-fn hardwareless_config(framebuffer_filename: String) -> Configuration {
-    let mut default_config = common::default_test_configuration();
-
-    default_config.display.frame_buffer = framebuffer_filename;
-    default_config.printer.serial = String::from("n/a");
-
-    default_config
 }

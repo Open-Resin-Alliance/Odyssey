@@ -9,6 +9,8 @@ edition = "2021"
 clap = { version = "4.1.6", features = ["derive"] }
 cross = "0.2.5"
 config = "0.13.4"
+toml_edit = {version = "0.22.24", features=["serde"]}
+optional_struct = "0.5.2"
 serde = "1.0"
 serde_yaml = "0.9"
 zip = "1.1.1"

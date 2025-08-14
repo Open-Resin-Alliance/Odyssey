@@ -4,6 +4,12 @@ pub struct ShutdownHandler {
     pub cancellation_token: CancellationToken,
 }
 
+impl Default for ShutdownHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ShutdownHandler {
     pub fn new() -> Self {
         let cancellation_token = CancellationToken::new();
