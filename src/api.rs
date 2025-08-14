@@ -169,9 +169,8 @@ impl Api {
     }
 
     #[oai(path = "/update", method = "post")]
-    async fn update(&self,
-        Query(release): Query<String>,) -> Result<()> {
-       Ok(updates::update(release)?)
+    async fn update(&self, Query(release): Query<String>) -> Result<()> {
+        Ok(updates::update(release)?)
     }
 
     #[oai(path = "/manual", method = "post")]
