@@ -13,7 +13,8 @@ use itertools::Itertools;
 use optional_struct::Applicable;
 use poem::{
     error::{
-        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented, ServiceUnavailable, Unauthorized,
+        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented,
+        ServiceUnavailable, Unauthorized,
     },
     listener::TcpListener,
     middleware::Cors,
