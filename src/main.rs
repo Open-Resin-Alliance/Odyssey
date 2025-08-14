@@ -33,7 +33,7 @@ struct Args {
 fn main() {
     let shutdown_handler = ShutdownHandler::new();
 
-    let args = parse_cli();
+    let args = Args::parse();
 
     SimpleLogger::new()
         .with_level(log::LevelFilter::from_str(&args.loglevel).expect("Unable to parse loglevel"))
@@ -42,7 +42,8 @@ fn main() {
 
     log::info!("Starting Odyssey");
 
-    let configuration = parse_config(args.config);
+    let configuration = Configuration::from_file(args.config)
+        .expect("Config could not be parsed. See example odyssey.yaml for expected fields:");
 
     let mut serial = tokio_serial::new(
         configuration.printer.serial.clone(),
@@ -62,12 +63,12 @@ fn main() {
     let (serial_write_sender, serial_write_receiver) = broadcast::channel(200);
 
     let gcode = Gcode::new(
-        configuration.clone(),
+        &configuration.gcode,
         serial_read_receiver,
         serial_write_sender,
     );
 
-    let display: PrintDisplay = PrintDisplay::new(configuration.display.clone());
+    let display: PrintDisplay = PrintDisplay::new(&configuration.display);
 
     let operation_channel = mpsc::channel::<Operation>(100);
     let status_channel = broadcast::channel::<PrinterState>(100);
@@ -131,13 +132,4 @@ fn build_runtime() -> Runtime {
         .enable_io()
         .build()
         .expect("Unable to start Tokio runtime")
-}
-
-fn parse_cli() -> Args {
-    Args::parse()
-}
-
-fn parse_config(config_file: String) -> Configuration {
-    Configuration::from_file(config_file)
-        .expect("Config could not be parsed. See example odyssey.yaml for expected fields:")
 }

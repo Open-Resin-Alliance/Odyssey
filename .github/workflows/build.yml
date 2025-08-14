@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       
@@ -70,7 +72,7 @@ jobs:
           name: odyssey_x86_64
           path: odyssey_x86_64/*
 
-      - uses: ncipollo/release-action@v1.14.0
+      - uses: ncipollo/release-action@v1.18.0
         if: github.ref == 'refs/heads/main'
         with:
           artifacts: "odyssey*.tar.gz"
@@ -79,7 +81,7 @@ jobs:
           generateReleaseNotes: true
           commit: ${{github.sha}}
 
-      - uses: ncipollo/release-action@v1.14.0
+      - uses: ncipollo/release-action@v1.18.0
         if: github.ref != 'refs/heads/main'
         with:
           artifacts: "*odyssey*.tar.gz"

@@ -2,11 +2,14 @@ use odyssey::configuration::{ApiConfig, Configuration, DisplayConfig, GcodeConfi
 
 #[allow(unused_variables)]
 pub static TEST_RESOURCE_DIR: &str = "tests/resources";
+pub static RESOURCE_DIR: &str = "resources";
 pub static UPLOAD_DIR: &str = "uploads";
 pub static CARGO_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
+#[allow(dead_code)]
 pub fn default_test_configuration() -> Configuration {
     Configuration {
+        config_file: Some("".to_owned()),
         printer: PrinterConfig {
             serial: String::from("/dev/null"),
             baudrate: 250000,
@@ -48,10 +51,16 @@ pub fn default_test_configuration() -> Configuration {
 }
 
 #[allow(dead_code)]
+pub fn resource_path(resource_file: String) -> String {
+    format!("{CARGO_DIR}/{RESOURCE_DIR}/{resource_file}")
+}
+
+#[allow(dead_code)]
 pub fn test_resource_path(resource_file: String) -> String {
     format!("{CARGO_DIR}/{TEST_RESOURCE_DIR}/{resource_file}")
 }
 
+#[allow(dead_code)]
 pub fn upload_path() -> String {
     format!("{CARGO_DIR}/{UPLOAD_DIR}")
 }
