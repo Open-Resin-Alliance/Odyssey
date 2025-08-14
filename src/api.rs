@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{
     fs,
     sync::{broadcast, mpsc, RwLock},
+    task::spawn_blocking,
     time::interval,
 };
 use tokio_util::sync::CancellationToken;
@@ -154,8 +155,12 @@ impl Api {
 
     #[oai(path = "/update/releases", method = "get")]
     async fn get_releases(&self) -> Result<Json<Vec<ReleaseVersion>>> {
+        let releases_result = spawn_blocking(updates::get_releases)
+            .await
+            .map_err(InternalServerError)?;
+
         Ok(Json(
-            updates::get_releases()?
+            releases_result?
                 .iter()
                 .map(|rel| ReleaseVersion {
                     name: rel.name.clone(),
