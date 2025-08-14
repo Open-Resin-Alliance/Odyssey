@@ -13,8 +13,7 @@ use itertools::Itertools;
 use optional_struct::Applicable;
 use poem::{
     error::{
-        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotFound,
-        NotFoundError, NotImplemented, ServiceUnavailable, Unauthorized,
+        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented, ServiceUnavailable, Unauthorized,
     },
     listener::TcpListener,
     middleware::Cors,
@@ -27,7 +26,6 @@ use poem_openapi::{
     types::multipart::Upload,
     Multipart, Object, OpenApi, OpenApiService,
 };
-use self_update::update::Release;
 use serde::{Deserialize, Serialize};
 use tokio::{
     fs,

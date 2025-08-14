@@ -1,5 +1,4 @@
-use poem_openapi::{types::ToJSON, Enum, Object};
-use self_update::update::Release;
+use poem_openapi::{Enum, Object};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Enum)]
