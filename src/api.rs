@@ -16,7 +16,12 @@ use poem::{
     error::{
         BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented,
         ServiceUnavailable, Unauthorized,
-    }, http::status, listener::TcpListener, middleware::Cors, web::{sse::Event, Data}, EndpointExt, Result, Route, Server
+    },
+    http::status,
+    listener::TcpListener,
+    middleware::Cors,
+    web::{sse::Event, Data},
+    EndpointExt, Result, Route, Server,
 };
 use poem_openapi::{
     param::Query,
@@ -144,42 +149,22 @@ impl Api {
         &self,
         Data(state_receiver): Data<&Arc<broadcast::Receiver<PrinterState>>>,
     ) -> EventStream<BoxStream<'static, Option<PrinterState>>> {
-        let event_stream = EventStream::new(Api::_status_stream(state_receiver)).keep_alive(Duration::from_secs(15))
-            .to_event(|status| 
-                match status {
-                    Some(status_update)=>Event::message(status_update.to_json_string()).event_type("push"),
-                    None => Event::Retry { retry: 1 },
+        EventStream::new(Api::_status_stream(state_receiver))
+            .keep_alive(Duration::from_secs(15))
+            .to_event(|status| match status {
+                Some(status_update) => {
+                    Event::message(status_update.to_json_string()).event_type("status")
                 }
-                
-            );
-
-        tracing::info!("build status event_stream");
-        event_stream
+                None => Event::Retry { retry: 1 },
+            })
     }
 
     fn _status_stream(
         state_receiver: &Arc<broadcast::Receiver<PrinterState>>,
     ) -> BoxStream<'static, Option<PrinterState>> {
-        let stream =
-            BroadcastStream::new(state_receiver.resubscribe())/* .filter_map(
-                |status_result| async move {
-                    tracing::info!("{:?}", status_result);
-                    status_result
-                        .clone()
-                        .map_err(|err| {
-                            tracing::error!(
-                                "Failed to retrieve printer state for /status/stream\n{}",
-                                err
-                            );
-                            err
-                        })
-                        .ok()
-                },
-            ).take(1)*/
+        BroadcastStream::new(state_receiver.resubscribe())
             .map(|result| result.ok())
-        ;
-        tracing::info!("built status stream");
-        stream.boxed()
+            .boxed()
     }
 
     #[instrument]
@@ -188,7 +173,7 @@ impl Api {
         Json(full_config.clone())
     }
 
-    #[instrument(skip(z,cure))]
+    #[instrument(skip(z, cure))]
     #[oai(path = "/manual", method = "post")]
     async fn manual_control(
         &self,
@@ -655,7 +640,7 @@ pub async fn start_api(
 
     let api_service = OpenApiService::new(Api, "Odyssey API", "1.0");
 
-    let ui = api_service.redoc();
+    let ui = api_service.swagger_ui();
 
     let mut app = Route::new().nest("/", api_service);
 

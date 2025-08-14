@@ -23,7 +23,7 @@ async-trait = "0.1.64"
 regex = "1"
 serialport = { version = "4.2.0", default-features = false }
 poem = { version = "3.0.0", features = ["websocket", "multipart","sse"]}
-poem-openapi = { version = "5.0.0", features = ["swagger-ui","redoc","rapidoc"] }
+poem-openapi = { version = "5.0.0", features = ["swagger-ui"] }
 glob = "0.3.1"
 log = "0.4.17"
 simple_logger = "4.1.0"

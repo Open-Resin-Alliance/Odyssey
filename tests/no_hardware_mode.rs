@@ -30,8 +30,9 @@ mod common;
 fn no_hardware_mode() {
     let shutdown_handler = ShutdownHandler::new();
 
-
-    tracing_subscriber::fmt().with_max_level(Level::TRACE).init();
+    tracing_subscriber::fmt()
+        .with_max_level(Level::TRACE)
+        .init();
 
     let tmp_file = tempfile::Builder::new()
         .prefix("odysseyTest")

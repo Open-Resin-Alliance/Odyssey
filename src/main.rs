@@ -35,7 +35,9 @@ fn main() {
 
     let args = parse_cli();
 
-    tracing_subscriber::fmt().with_max_level(LevelFilter::from_str(&args.loglevel).expect("Unable to parse loglevel")).init();
+    tracing_subscriber::fmt()
+        .with_max_level(LevelFilter::from_str(&args.loglevel).expect("Unable to parse loglevel"))
+        .init();
 
     tracing::info!("Starting Odyssey");
 
