@@ -20,7 +20,7 @@ jobs:
           field: 'package.version'
 
       - name: install dependencies
-        run: sudo apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf g++-aarch64-linux-gnu gcc-aarch64-linux-gnu gcc g++
+        run: sudo apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf g++-aarch64-linux-gnu gcc-aarch64-linux-gnu gcc g++ libssl-dev
 
       - name: Update Rust Toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
