@@ -174,7 +174,10 @@ impl Api {
 
     #[oai(path = "/update", method = "post")]
     async fn update(&self, Query(release): Query<String>) -> Result<()> {
-        Ok(updates::update(release)?)
+        Ok(spawn_blocking(|| 
+            updates::update(release)
+        ).await.map_err(InternalServerError)??)
+
     }
 
     #[oai(path = "/manual", method = "post")]
