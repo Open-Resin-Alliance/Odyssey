@@ -21,12 +21,12 @@ jobs:
 
       - name: export cargo version to env for build
         run: |
-          echo "ODYSSEY_RELEASE_VERSION='${{ steps.read_toml.outputs.value }}" >> "$GITHUB_ENV"
+          echo "ODYSSEY_RELEASE_VERSION=${{ steps.read_toml.outputs.value }}" >> "$GITHUB_ENV"
 
       - name: append branch to version if not main
         if: github.ref != 'refs/heads/main'
         run: |
-          echo "ODYSSEY_RELEASE_VERSION='${ODYSSEY_RELEASE_VERSION}-${{github.ref_name}}'" >> "$GITHUB_ENV"
+          echo "ODYSSEY_RELEASE_VERSION=${ODYSSEY_RELEASE_VERSION}-${{github.ref_name}}" >> "$GITHUB_ENV"
 
       - name: install dependencies
         run: sudo apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf g++-aarch64-linux-gnu gcc-aarch64-linux-gnu gcc g++
