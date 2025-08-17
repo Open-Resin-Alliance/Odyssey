@@ -69,3 +69,11 @@ pub enum DisplayTest {
     Grid,
     Dimensions,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize, Object)]
+pub struct ReleaseVersion {
+    pub name: String,
+    pub version: String,
+    pub date: String,
+    pub body: Option<String>,
+}

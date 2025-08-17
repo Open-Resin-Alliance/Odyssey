@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{
     fs,
     sync::{broadcast, mpsc, RwLock},
+    task::spawn_blocking,
     time::interval,
 };
 use tokio_util::sync::CancellationToken;
@@ -38,12 +39,13 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     api_objects::{
         DisplayTest, FileMetadata, LocationCategory, PhysicalState, PrintMetadata, PrinterState,
-        PrinterStatus, ThumbnailSize,
+        PrinterStatus, ReleaseVersion, ThumbnailSize,
     },
     configuration::{ApiConfig, Configuration, UpdateConfiguration},
     printer::Operation,
     printfile::PrintFile,
     sl1::Sl1,
+    updates,
 };
 
 #[derive(Debug, Multipart)]
@@ -149,6 +151,32 @@ impl Api {
         Configuration::overwrite_file(&ammend_config)?;
 
         Ok(Json(ammend_config))
+    }
+
+    #[oai(path = "/update/releases", method = "get")]
+    async fn get_releases(&self) -> Result<Json<Vec<ReleaseVersion>>> {
+        let releases_result = spawn_blocking(updates::get_releases)
+            .await
+            .map_err(InternalServerError)?;
+
+        Ok(Json(
+            releases_result?
+                .iter()
+                .map(|rel| ReleaseVersion {
+                    name: rel.name.clone(),
+                    version: rel.version.clone(),
+                    date: rel.date.clone(),
+                    body: rel.body.clone(),
+                })
+                .collect_vec(),
+        ))
+    }
+
+    #[oai(path = "/update", method = "post")]
+    async fn update(&self, Query(release): Query<String>) -> Result<()> {
+        Ok(spawn_blocking(|| updates::update(release))
+            .await
+            .map_err(InternalServerError)??)
     }
 
     #[oai(path = "/manual", method = "post")]
