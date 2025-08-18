@@ -662,15 +662,17 @@ pub async fn start_api(
         .with(Cors::new());
 
     match Server::new(TcpListener::bind(addr))
-            .run_with_graceful_shutdown(
-                app,
-                cancellation_token.clone().cancelled_owned(),
-                Option::None,
-            )
-            .await {
-        Ok(_) => 
-            log::info!("Shutting down API"),
-        Err(err) => 
-            log::error!("Fatal error encountered while awaiting API shutdown:\n{}",err),
+        .run_with_graceful_shutdown(
+            app,
+            cancellation_token.clone().cancelled_owned(),
+            Option::None,
+        )
+        .await
+    {
+        Ok(_) => log::info!("Shutting down API"),
+        Err(err) => log::error!(
+            "Fatal error encountered while awaiting API shutdown:\n{}",
+            err
+        ),
     };
 }
