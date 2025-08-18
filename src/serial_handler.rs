@@ -57,18 +57,15 @@ pub async fn run_writer(
         }
         interval.tick().await;
 
-        match receiver.recv().await {
-            Ok(message) => {
-                while let Err(e) = send_serial(&mut serial_port, message.clone()).await {
-                    match e.kind() {
-                        io::ErrorKind::Interrupted => {
-                            continue;
-                        }
-                        _ => break,
+        if let Ok(message) = receiver.recv().await {
+            while let Err(e) = send_serial(&mut serial_port, message.clone()).await {
+                match e.kind() {
+                    io::ErrorKind::Interrupted => {
+                        continue;
                     }
+                    _ => break,
                 }
             }
-            Err(_) => (),
         }
     }
 }

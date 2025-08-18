@@ -365,7 +365,7 @@ impl<T: HardwareControl> Printer<T> {
             PrinterStatus::Idle => {
                 self.state.physical_state = new_physical_state;
             }
-            PrinterStatus::Shutdown {} => (),
+            PrinterStatus::Shutdown => (),
         }
         self.send_status().await;
     }
@@ -492,15 +492,12 @@ impl<T: HardwareControl> Printer<T> {
 
         self.shutdown_operation_handler().await;
 
-        match self.state.status {
-            PrinterStatus::Shutdown => {
-                if self.hardware_controller.is_ready().await {
-                    self.boot().await;
-                } else {
-                    shutdown_interv.tick().await;
-                }
+        if let PrinterStatus::Shutdown = self.state.status {
+            if self.hardware_controller.is_ready().await {
+                self.boot().await;
+            } else {
+                shutdown_interv.tick().await;
             }
-            _ => (),
         }
     }
 
