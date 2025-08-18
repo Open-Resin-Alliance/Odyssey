@@ -18,6 +18,7 @@ pub async fn run_listener(
 
     loop {
         if cancellation_token.is_cancelled() {
+            log::info!("Shutting down serial read loop");
             break;
         }
         interval.tick().await;
@@ -51,6 +52,7 @@ pub async fn run_writer(
 
     loop {
         if cancellation_token.is_cancelled() {
+            log::info!("Shutting down exiting serial write loop");
             break;
         }
         interval.tick().await;
@@ -66,7 +68,7 @@ pub async fn run_writer(
                     }
                 }
             }
-            Err(_) => todo!(),
+            Err(_) => (),
         }
     }
 }

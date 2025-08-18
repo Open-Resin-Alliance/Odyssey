@@ -23,6 +23,7 @@ pub struct Printer<T: HardwareControl> {
     pub state: PrinterState,
     pub operation_receiver: mpsc::Receiver<Operation>,
     pub status_sender: broadcast::Sender<PrinterState>,
+    pub cancellation_token: CancellationToken,
 }
 
 impl<T: HardwareControl> Printer<T> {
@@ -55,9 +56,10 @@ impl<T: HardwareControl> Printer<T> {
             },
             operation_receiver,
             status_sender,
+            cancellation_token,
         };
 
-        printer.start_statemachine(cancellation_token).await
+        printer.start_statemachine().await
     }
 
     pub async fn print_event_loop(&mut self) {
@@ -427,15 +429,18 @@ impl<T: HardwareControl> Printer<T> {
     }
 
     pub async fn shutdown(&mut self) {
-        log::info!("Shutting down.");
+        log::info!("Initiating shutdown.");
         // If hardware still running, execute shutdown commands
         if self.hardware_controller.is_ready().await {
             if (self.hardware_controller.shutdown().await).is_ok() {
                 log::info!("Shut down gcode executed successfully")
             } else {
-                log::info!("Unable to execute shutdown gcode")
+                log::error!("Unable to execute shutdown gcode")
             }
         }
+
+        self.cancellation_token.cancel();
+
         self.state.status = PrinterStatus::Shutdown;
         self.state.paused = None;
         self.state.print_data = None;
@@ -462,11 +467,14 @@ impl<T: HardwareControl> Printer<T> {
             .expect("Failed to send state update");
     }
 
-    pub async fn start_statemachine(&mut self, cancellation_token: CancellationToken) {
+    pub async fn start_statemachine(&mut self) {
         self.hardware_controller.initialize().await;
 
+        let mut interv = interval(Duration::from_millis(1000));
+
         loop {
-            if cancellation_token.is_cancelled() {
+            if self.cancellation_token.is_cancelled() {
+                log::info!("Shutting down statemachine");
                 break;
             }
             match self.state.status {
@@ -474,25 +482,25 @@ impl<T: HardwareControl> Printer<T> {
                 PrinterStatus::Printing => self.print_event_loop().await,
                 PrinterStatus::Shutdown => self.shutdown_event_loop().await,
             }
+
+            interv.tick().await;
         }
     }
 
     async fn shutdown_event_loop(&mut self) {
         let mut shutdown_interv = interval(Duration::from_millis(10000));
 
-        loop {
-            self.shutdown_operation_handler().await;
+        self.shutdown_operation_handler().await;
 
-            match self.state.status {
-                PrinterStatus::Shutdown => {
-                    if self.hardware_controller.is_ready().await {
-                        self.boot().await;
-                    } else {
-                        shutdown_interv.tick().await;
-                    }
+        match self.state.status {
+            PrinterStatus::Shutdown => {
+                if self.hardware_controller.is_ready().await {
+                    self.boot().await;
+                } else {
+                    shutdown_interv.tick().await;
                 }
-                _ => break,
             }
+            _ => (),
         }
     }
 
@@ -558,17 +566,7 @@ impl<T: HardwareControl> Printer<T> {
     }
 
     async fn idle_event_loop(&mut self) {
-        let mut interv = interval(Duration::from_millis(1000));
-        loop {
-            self.idle_operation_handler().await;
-
-            match self.state.status {
-                PrinterStatus::Idle => {
-                    interv.tick().await;
-                }
-                _ => break,
-            }
-        }
+        self.idle_operation_handler().await;
     }
 }
 
