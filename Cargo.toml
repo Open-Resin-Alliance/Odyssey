@@ -9,6 +9,8 @@ edition = "2021"
 clap = { version = "4.1.6", features = ["derive"] }
 cross = "0.2.5"
 config = "0.13.4"
+toml_edit = {version = "0.22.24", features=["serde"]}
+optional_struct = "0.5.2"
 serde = "1.0"
 serde_yaml = "0.9"
 zip = "1.1.1"
@@ -31,6 +33,7 @@ tokio-stream = {version="0.1.17",features = ["sync"]}
 tracing = "0.1"
 tracing-subscriber = "0.3"
 async-stream = "0.3.2"
+self_update = { version = "0.42.0", features = ["rustls", "archive-tar","compression-flate2"], default-features = false }
 
 [dev-dependencies]
 tempfile = "3.13.0"

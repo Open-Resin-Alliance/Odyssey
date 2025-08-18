@@ -10,6 +10,13 @@ const RESOURCES: &str = "resources";
 const SCRIPTS: &str = "scripts";
 
 fn main() {
+    // If we set CARGO_PKG_VERSION this way, then it will override the default value, which is
+    // taken from the `version` in Cargo.toml.
+    if let Ok(val) = std::env::var("ODYSSEY_RELEASE_VERSION") {
+        println!("cargo:rustc-env=CARGO_PKG_VERSION={}", val);
+    }
+    println!("cargo:rerun-if-env-changed=ODYSSEY_RELEASE_VERSION");
+
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let cargo_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
     fs::copy(

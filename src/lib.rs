@@ -8,4 +8,5 @@ pub mod printfile;
 pub mod serial_handler;
 pub mod shutdown_handler;
 pub mod sl1;
+pub mod updates;
 mod wrapped_framebuffer;

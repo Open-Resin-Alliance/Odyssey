@@ -8,7 +8,7 @@ use tokio::sync::broadcast;
 use tokio::time::{interval, sleep, Duration};
 
 use crate::api_objects::PhysicalState;
-use crate::configuration::{Configuration, GcodeConfig};
+use crate::configuration::GcodeConfig;
 use crate::printer::HardwareControl;
 
 pub struct Gcode {
@@ -21,12 +21,12 @@ pub struct Gcode {
 
 impl Gcode {
     pub fn new(
-        config: Configuration,
+        config: &GcodeConfig,
         serial_receiver: broadcast::Receiver<String>,
         serial_sender: broadcast::Sender<String>,
     ) -> Gcode {
         Gcode {
-            config: config.gcode,
+            config: config.clone(),
             state: PhysicalState {
                 z: 0.0,
                 z_microns: 0,

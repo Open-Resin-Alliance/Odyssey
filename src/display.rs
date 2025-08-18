@@ -104,19 +104,19 @@ impl PrintDisplay {
         vec![0x00; (self.config.screen_width * self.config.screen_height) as usize]
     }
 
-    pub fn new(config: DisplayConfig) -> PrintDisplay {
+    pub fn new(config: &DisplayConfig) -> PrintDisplay {
         PrintDisplay {
             frame_buffer: WrappedFramebuffer {
                 frame_buffer: Framebuffer::new(config.frame_buffer.clone()).ok(),
                 fb_path: config.frame_buffer.clone(),
             },
-            config,
+            config: config.clone(),
         }
     }
 }
 
 impl Clone for PrintDisplay {
     fn clone(&self) -> Self {
-        Self::new(self.config.clone())
+        Self::new(&self.config.clone())
     }
 }
