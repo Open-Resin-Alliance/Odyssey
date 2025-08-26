@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc};
@@ -16,8 +18,8 @@ use crate::printfile::PrintFile;
 use crate::sl1::*;
 use tokio::time::{interval, sleep, Duration};
 
-pub struct Printer<T: HardwareControl> {
-    pub config: PrinterConfig,
+pub struct Printer<'a, T: HardwareControl> {
+    pub config: &'a PrinterConfig,
     pub display: PrintDisplay,
     pub hardware_controller: T,
     pub state: PrinterState,
@@ -25,21 +27,24 @@ pub struct Printer<T: HardwareControl> {
     pub status_sender: broadcast::Sender<PrinterState>,
 }
 
-impl<T: HardwareControl> Printer<T> {
+impl<T: HardwareControl> Printer<'_, T> {
     pub async fn start_printer(
-        config: PrinterConfig,
+        config: Arc<Configuration>,
         display: PrintDisplay,
         mut hardware_controller: T,
         operation_receiver: mpsc::Receiver<Operation>,
         status_sender: broadcast::Sender<PrinterState>,
         cancellation_token: CancellationToken,
     ) {
-        hardware_controller.add_print_variable("max_z".to_string(), config.max_z.to_string());
         hardware_controller
-            .add_print_variable("z_lift".to_string(), config.default_lift.to_string());
+            .add_print_variable("max_z".to_string(), config.printer.max_z.to_string());
+        hardware_controller.add_print_variable(
+            "z_lift".to_string(),
+            config.printer.default_lift.to_string(),
+        );
 
         let mut printer = Printer {
-            config,
+            config: &config.printer,
             display,
             hardware_controller,
             state: PrinterState {

@@ -77,13 +77,13 @@ impl Api {
         Query(file_path): Query<String>,
         Query(location): Query<Option<LocationCategory>>,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
-        Data(configuration): Data<&ApiConfig>,
+        Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<()> {
         let location = location.unwrap_or(LocationCategory::Local);
 
-        let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
+        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
 
-        let file_data = Api::_get_filedata(full_file_path, &location, configuration)?;
+        let file_data = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
 
         operation_sender
             .send(Operation::StartPrint { file_data })
@@ -170,18 +170,18 @@ impl Api {
 
     #[instrument]
     #[oai(path = "/config", method = "get")]
-    async fn get_config(&self, Data(full_config): Data<&Configuration>) -> Json<Configuration> {
-        Json(full_config.clone())
+    async fn get_config(&self, Data(full_config): Data<&Arc<Configuration>>) -> Json<Configuration> {
+        Json(full_config.as_ref().clone())
     }
 
     #[instrument]
     #[oai(path = "/config", method = "patch")]
     async fn patch_config(
         &self,
-        Data(full_config): Data<&Configuration>,
+        Data(full_config): Data<&Arc<Configuration>>,
         Json(patch_config): Json<UpdateConfiguration>,
     ) -> Result<Json<Configuration>> {
-        let ammend_config = patch_config.build(full_config.clone());
+        let ammend_config = patch_config.build(full_config.as_ref().clone());
         Configuration::overwrite_file(&ammend_config)?;
 
         Ok(Json(ammend_config))
@@ -292,13 +292,13 @@ impl Api {
         Query(location): Query<Option<LocationCategory>>,
         Query(layer): Query<usize>,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
-        Data(configuration): Data<&ApiConfig>,
+        Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<()> {
         let location = location.unwrap_or(LocationCategory::Local);
 
-        let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
+        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
 
-        let file_data = Api::_get_filedata(full_file_path, &location, configuration)?;
+        let file_data = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
 
         operation_sender
             .send(Operation::ManualDisplayLayer { file_data, layer })
@@ -310,7 +310,7 @@ impl Api {
     async fn upload_file(
         &self,
         file_upload: UploadPayload,
-        Data(configuration): Data<&ApiConfig>,
+        Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<()> {
         tracing::info!("Uploading file");
 
@@ -322,7 +322,8 @@ impl Api {
 
         let bytes = file_upload.file.into_vec().await.map_err(BadRequest)?;
 
-        let mut f = File::create(configuration.upload_path.clone() + "/" + &file_name).map_err(InternalServerError)?;
+        let mut f = File::create(format!("{}/{file_name}", configuration.api.upload_path))
+            .map_err(InternalServerError)?;
         f.write_all(bytes.as_slice()).map_err(InternalServerError)?;
 
         Ok(())
@@ -335,7 +336,7 @@ impl Api {
         Query(location): Query<Option<LocationCategory>>,
         Query(page_index): Query<Option<usize>>,
         Query(page_size): Query<Option<usize>>,
-        Data(configuration): Data<&ApiConfig>,
+        Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<FilesResponse>> {
         let location = location.unwrap_or(LocationCategory::Local);
         let page_index = page_index.unwrap_or(DEFAULT_PAGE_INDEX);
@@ -351,9 +352,9 @@ impl Api {
 
         match location {
             LocationCategory::Local => {
-                Api::_get_local_files(subdirectory, page_index, page_size, configuration)
+                Api::_get_local_files(subdirectory, page_index, page_size, &configuration.api)
             }
-            LocationCategory::Usb => Api::_get_usb_files(page_index, page_size, configuration),
+            LocationCategory::Usb => Api::_get_usb_files(page_index, page_size, &configuration.api),
         }
     }
 
@@ -394,16 +395,12 @@ impl Api {
         let dirs = paths
             .iter()
             .filter(|f| f.is_dir())
-            .flat_map(|f| {
-                Api::_get_filedata(f.clone(), &LocationCategory::Local, configuration).ok()
-            })
+            .flat_map(|f| Api::_get_filedata(f, LocationCategory::Local, configuration).ok())
             .collect_vec();
         let files = paths
             .iter()
             .filter(|f| !f.is_dir())
-            .flat_map(|f| {
-                Api::_get_print_metadata(f.clone(), &LocationCategory::Local, configuration).ok()
-            })
+            .flat_map(|f| Api::_get_print_metadata(f, LocationCategory::Local, configuration).ok())
             .collect_vec();
 
         let next_index = Some(page_index + 1).filter(|_| chunks_iterator.next().is_some());
@@ -439,14 +436,16 @@ impl Api {
         tracing::info!("Getting full file path {:?}, {:?}", location, file_path);
 
         match location {
-            LocationCategory::Usb => Api::get_usb_file_path(configuration, file_path),
-            LocationCategory::Local => Api::get_local_file_path(configuration, file_path),
+            LocationCategory::Usb => Api::get_usb_file_path(&configuration.usb_glob, file_path),
+            LocationCategory::Local => {
+                Api::get_local_file_path(&configuration.upload_path, file_path)
+            }
         }
     }
 
     // Since USB paths are specified as a glob, find all and filter to file_name
-    fn get_usb_file_path(configuration: &ApiConfig, file_name: &str) -> Result<PathBuf> {
-        let paths = glob(&configuration.usb_glob).map_err(InternalServerError)?;
+    fn get_usb_file_path(usb_glob: &str, file_name: &str) -> Result<PathBuf> {
+        let paths = glob(usb_glob).map_err(InternalServerError)?;
 
         let path_buf = paths
             .filter_map(|path| path.ok())
@@ -460,8 +459,8 @@ impl Api {
     }
 
     // For Local files, look directly for specific file
-    fn get_local_file_path(configuration: &ApiConfig, file_path: &str) -> Result<PathBuf> {
-        let path = Path::new(&configuration.upload_path).join(file_path);
+    fn get_local_file_path(upload_path: &str, file_path: &str) -> Result<PathBuf> {
+        let path = Path::new(upload_path).join(file_path);
 
         path.exists()
             .then_some(path)
@@ -472,8 +471,8 @@ impl Api {
     }
 
     fn _get_filedata(
-        target_file: PathBuf,
-        location: &LocationCategory,
+        target_file: &PathBuf,
+        location: LocationCategory,
         configuration: &ApiConfig,
     ) -> Result<FileMetadata> {
         tracing::info!("Getting file data");
@@ -507,14 +506,14 @@ impl Api {
                 )))?,
             last_modified: modified_time,
             file_size,
-            location_category: location.clone(),
+            location_category: location,
             parent_path: configuration.upload_path.clone(),
         })
     }
 
     fn _get_print_metadata(
-        target_file: PathBuf,
-        location: &LocationCategory,
+        target_file: &PathBuf,
+        location: LocationCategory,
         configuration: &ApiConfig,
     ) -> Result<PrintMetadata> {
         let file_data = Api::_get_filedata(target_file, location, configuration)?;
@@ -528,13 +527,13 @@ impl Api {
         &self,
         Query(file_path): Query<String>,
         Query(location): Query<Option<LocationCategory>>,
-        Data(configuration): Data<&ApiConfig>,
+        Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Attachment<Vec<u8>>> {
         let location = location.unwrap_or(LocationCategory::Local);
 
         tracing::info!("Getting file {:?} in {:?}", file_path, location);
 
-        let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
+        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
 
         let file_name = full_file_path
             .file_name()
@@ -559,7 +558,7 @@ impl Api {
         &self,
         Query(file_path): Query<String>,
         Query(location): Query<Option<LocationCategory>>,
-        Data(configuration): Data<&ApiConfig>,
+        Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<PrintMetadata>> {
         let location = location.unwrap_or(LocationCategory::Local);
 
@@ -568,12 +567,12 @@ impl Api {
             file_path,
             location
         );
-        let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
+        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
 
         Ok(Json(Api::_get_print_metadata(
-            full_file_path,
-            &location,
-            configuration,
+            &full_file_path,
+            location,
+            &configuration.api,
         )?))
     }
 
@@ -584,15 +583,15 @@ impl Api {
         Query(file_path): Query<String>,
         Query(location): Query<Option<LocationCategory>>,
         Query(size): Query<Option<ThumbnailSize>>,
-        Data(configuration): Data<&ApiConfig>,
+        Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Attachment<Vec<u8>>> {
         let location = location.unwrap_or(LocationCategory::Local);
         let size = size.unwrap_or(ThumbnailSize::Small);
 
         tracing::info!("Getting thumbnail from {:?} in {:?}", file_path, location);
-        let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
+        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
 
-        let file_metadata = Api::_get_filedata(full_file_path, &location, configuration)?;
+        let file_metadata = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
         tracing::info!("Extracting print thumbnail");
 
         let file_data = Sl1::from_file(file_metadata)
@@ -608,14 +607,14 @@ impl Api {
         &self,
         Query(file_path): Query<String>,
         Query(location): Query<Option<LocationCategory>>,
-        Data(configuration): Data<&ApiConfig>,
+        Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<FileMetadata>> {
         let location = location.unwrap_or(LocationCategory::Local);
         tracing::info!("Deleting file {:?} in {:?}", file_path, location);
 
-        let full_file_path = Api::get_file_path(configuration, &file_path, &location)?;
+        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
 
-        let metadata = Api::_get_filedata(full_file_path.clone(), &location, configuration)?;
+        let metadata = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
 
         if full_file_path.is_dir() {
             fs::remove_dir_all(full_file_path)
@@ -651,7 +650,7 @@ async fn run_state_listener(
 }
 
 pub async fn start_api(
-    full_config: Configuration,
+    full_config: Arc<Configuration>,
     operation_sender: mpsc::Sender<Operation>,
     state_receiver: broadcast::Receiver<PrinterState>,
     cancellation_token: CancellationToken,
@@ -668,15 +667,12 @@ pub async fn start_api(
         status: PrinterStatus::Shutdown,
     }));
 
-    let configuration = full_config.api.clone();
-
     tokio::spawn(run_state_listener(
         state_receiver.resubscribe(),
         state_ref.clone(),
     ));
 
-    let port = configuration.port.to_string();
-    let addr = format!("0.0.0.0:{port}");
+    let addr = format!("0.0.0.0:{0}", full_config.api.port);
 
     let api_service = OpenApiService::new(Api, "Odyssey API", "1.0");
 
@@ -692,8 +688,7 @@ pub async fn start_api(
         .data(operation_sender)
         .data(Arc::new(state_receiver))
         .data(state_ref.clone())
-        .data(full_config.clone())
-        .data(configuration.clone())
+        .data(full_config)
         .catch_all_error(|err| async move {
             log::error!("{}", err);
             Response::builder()

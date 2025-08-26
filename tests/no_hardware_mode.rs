@@ -1,4 +1,4 @@
-use std::{fs, time::Duration};
+use std::{fs, sync::Arc, time::Duration};
 
 use crate::common::test_resource_path;
 use odyssey::{
@@ -51,49 +51,50 @@ fn no_hardware_mode() {
 
     configuration.display.frame_buffer = temp_fb.as_os_str().to_str().unwrap().to_owned();
     configuration.config_file = Some(temp_config.as_os_str().to_str().unwrap().to_owned());
+    configuration.api.upload_path = temp_dir.path().as_os_str().to_str().unwrap().to_owned();
 
     Configuration::overwrite_file(&configuration).expect("Unable to save temporary config file");
 
-    let gcode = Gcode::new(
-        &configuration.gcode.clone(),
-        serial_read_receiver,
-        serial_write_sender,
-    );
+    let config = Arc::new(configuration);
 
-    let display: PrintDisplay = PrintDisplay::new(&configuration.display.clone());
+    let gcode = Gcode::new(&config.gcode, serial_read_receiver, serial_write_sender);
+
+    let display: PrintDisplay = PrintDisplay::new(&config.display);
 
     let operation_channel = mpsc::channel::<Operation>(100);
     let status_channel = broadcast::channel::<PrinterState>(100);
 
     let runtime = build_runtime();
 
+    let sender = operation_channel.0.clone();
+    let receiver = status_channel.1.resubscribe();
+
+    let serial_handle = runtime.spawn(serial_feedback_loop(
+        serial_read_sender,
+        serial_write_receiver,
+        shutdown_handler.cancellation_token.clone(),
+        config.gcode.status_check.clone(),
+        config.gcode.status_desired.clone(),
+        config.gcode.move_sync.clone(),
+    ));
+
+    let statemachine_handle = runtime.spawn(Printer::start_printer(
+        config.clone(),
+        display,
+        gcode,
+        operation_channel.1,
+        status_channel.0.clone(),
+        shutdown_handler.cancellation_token.clone(),
+    ));
+
+    let api_handle = runtime.spawn(api::start_api(
+        config.clone(),
+        sender,
+        receiver,
+        shutdown_handler.cancellation_token.clone(),
+    ));
+
     runtime.block_on(async {
-        let sender = operation_channel.0.clone();
-        let receiver = status_channel.1.resubscribe();
-
-        let serial_handle = tokio::spawn(serial_feedback_loop(
-            configuration.clone(),
-            serial_read_sender,
-            serial_write_receiver,
-            shutdown_handler.cancellation_token.clone(),
-        ));
-
-        let statemachine_handle = tokio::spawn(Printer::start_printer(
-            configuration.printer.clone(),
-            display,
-            gcode,
-            operation_channel.1,
-            status_channel.0.clone(),
-            shutdown_handler.cancellation_token.clone(),
-        ));
-
-        let api_handle = tokio::spawn(api::start_api(
-            configuration,
-            sender,
-            receiver,
-            shutdown_handler.cancellation_token.clone(),
-        ));
-
         shutdown_handler.until_shutdown().await;
 
         let _ = serial_handle.await;
@@ -108,10 +109,12 @@ fn no_hardware_mode() {
 }
 
 pub async fn serial_feedback_loop(
-    configuration: Configuration,
     sender: Sender<String>,
     mut receiver: Receiver<String>,
     cancellation_token: CancellationToken,
+    status_check: String,
+    status_desired: String,
+    move_sync: String,
 ) {
     let mut interval = interval(Duration::from_millis(100));
 
@@ -125,10 +128,10 @@ pub async fn serial_feedback_loop(
                 tracing::info!("{}", command);
 
                 let response: String;
-                if command.as_str().trim() == configuration.gcode.status_check.as_str().trim() {
-                    response = configuration.gcode.status_desired.clone();
+                if command.as_str().trim() == status_check.trim() {
+                    response = status_desired.clone();
                 } else {
-                    response = configuration.gcode.move_sync.clone();
+                    response = move_sync.clone();
                 };
 
                 tracing::info!("command='{}', response='{}'", command.trim(), response);
