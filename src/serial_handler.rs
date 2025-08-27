@@ -18,6 +18,7 @@ pub async fn run_listener(
 
     loop {
         if cancellation_token.is_cancelled() {
+            log::info!("Shutting down serial read loop");
             break;
         }
         interval.tick().await;
@@ -51,22 +52,20 @@ pub async fn run_writer(
 
     loop {
         if cancellation_token.is_cancelled() {
+            log::info!("Shutting down exiting serial write loop");
             break;
         }
         interval.tick().await;
 
-        match receiver.recv().await {
-            Ok(message) => {
-                while let Err(e) = send_serial(&mut serial_port, message.clone()).await {
-                    match e.kind() {
-                        io::ErrorKind::Interrupted => {
-                            continue;
-                        }
-                        _ => break,
+        if let Ok(message) = receiver.recv().await {
+            while let Err(e) = send_serial(&mut serial_port, message.clone()).await {
+                match e.kind() {
+                    io::ErrorKind::Interrupted => {
+                        continue;
                     }
+                    _ => break,
                 }
             }
-            Err(_) => todo!(),
         }
     }
 }
