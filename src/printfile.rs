@@ -1,9 +1,14 @@
-use std::io::Error;
+use std::{fs::File, io::Error};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use xattr::FileExt;
 
 use crate::api_objects::{FileData, FileMetadata, PrintMetadata, ThumbnailSize};
+
+static XATTR_PRINT_COUNT:& str = "user.odyssey.print_count";
+static XATTR_PRINT_RATING:& str = "user.odyssey.print_rating";
+static XATTR_PRINT_FAVORITE:& str = "user.odyssey.favorite";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Layer {
@@ -37,5 +42,25 @@ pub trait PrintFile {
     }
     fn get_wait_before_exposure(&self) -> Option<f64> {
         None
+    }
+    fn _get_xattr(file: &File, xattr_name: &str) -> Option<Vec<u8>> where Self: Sized{
+        if xattr::SUPPORTED_PLATFORM {
+            match file.get_xattr(xattr_name) {
+                Ok(bytes) => return bytes,
+                Err(err) => {
+                    tracing::warn!("Unable to load xattr {xattr_name}:\n{err}");
+                },
+            }
+        }
+        None
+    }
+    fn get_print_count(file: &File) -> u32 where Self: Sized{
+        Self::_get_xattr(file, XATTR_PRINT_COUNT).map(|v| v.try_into().ok()).flatten().map(u32::from_be_bytes).unwrap_or(0)
+    }
+    fn get_rating(file: &File) -> Option<u8> where Self: Sized{
+        Self::_get_xattr(file, XATTR_PRINT_RATING).map(|v| v.try_into().ok()).flatten().map(u8::from_be_bytes)
+    }
+    fn get_favorite(file: &File) -> bool where Self: Sized{
+        Self::_get_xattr(file, XATTR_PRINT_FAVORITE).map(|v| v.try_into().ok()).flatten().map(u8::from_be_bytes).filter(|val|*val!=0).is_some()
     }
 }
