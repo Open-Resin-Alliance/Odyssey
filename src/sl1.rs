@@ -84,6 +84,11 @@ impl PrintFile for Sl1 {
 
         let file = File::open(full_path).unwrap();
 
+        
+        let print_count = Sl1::get_print_count(&file);
+        let favorite = Sl1::get_favorite(&file);
+        let rating = Sl1::get_rating(&file);
+
         let mut archive = ZipArchive::new(file).unwrap();
 
         let mut config_contents = String::new();
@@ -110,6 +115,9 @@ impl PrintFile for Sl1 {
             layer_height: config.layer_height,
             layer_height_microns: ((config.layer_height * 1000.0).trunc() as u32),
             layer_count: frame_list.len(),
+            print_count,
+            favorite,
+            rating
         };
 
         Sl1 {

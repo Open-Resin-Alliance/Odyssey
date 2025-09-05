@@ -31,6 +31,9 @@ pub struct PrintMetadata {
     pub layer_height: f64,
     pub layer_height_microns: u32,
     pub layer_count: usize,
+    pub print_count: u32,
+    pub favorite: bool,
+    pub rating: Option<u8>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Enum)]
