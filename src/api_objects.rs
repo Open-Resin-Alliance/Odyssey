@@ -1,6 +1,5 @@
 use std::{
     error::Error,
-    ffi::{OsStr, OsString},
     fs::File,
     io,
     path::{Path, PathBuf},
@@ -8,7 +7,6 @@ use std::{
 };
 
 use optional_struct::optional_struct;
-use poem::error::NotFoundError;
 use poem_openapi::{Enum, Object};
 use serde::{Deserialize, Serialize};
 

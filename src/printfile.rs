@@ -75,8 +75,7 @@ pub trait PrintFile {
         Self: Sized,
     {
         Self::_get_xattr(file, XATTR_PRINT_COUNT)
-            .map(|v| v.try_into().ok())
-            .flatten()
+            .and_then(|v| v.try_into().ok())
             .map(u32::from_be_bytes)
             .unwrap_or(0)
     }
@@ -85,8 +84,7 @@ pub trait PrintFile {
         Self: Sized,
     {
         Self::_get_xattr(file, XATTR_PRINT_RATING)
-            .map(|v| v.try_into().ok())
-            .flatten()
+            .and_then(|v| v.try_into().ok())
             .map(u8::from_be_bytes)
     }
     fn get_favorite(file: &File) -> bool
@@ -94,8 +92,7 @@ pub trait PrintFile {
         Self: Sized,
     {
         Self::_get_xattr(file, XATTR_PRINT_FAVORITE)
-            .map(|v| v.try_into().ok())
-            .flatten()
+            .and_then(|v| v.try_into().ok())
             .map(u8::from_be_bytes)
             .filter(|val| *val != 0)
             .is_some()

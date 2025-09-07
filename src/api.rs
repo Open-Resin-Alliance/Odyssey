@@ -378,13 +378,12 @@ impl Api {
         let files_vec = read_dir
             .map_err(InternalServerError)?
             .flatten()
-            .map(|f| {
+            .filter_map(|f| {
                 f.path()
                     .strip_prefix(upload_path)
                     .map(|path_ref| path_ref.to_owned())
                     .ok()
             })
-            .flatten()
             // TODO add sorting here
             .filter(|f| f.is_dir() || f.extension().and_then(OsStr::to_str).eq(&Some("sl1")));
 
@@ -399,15 +398,13 @@ impl Api {
         let dirs = paths
             .iter()
             .filter(|f| f.is_dir())
-            .map(|f| f.as_os_str().to_str())
-            .flatten()
+            .filter_map(|f| f.as_os_str().to_str())
             .flat_map(|f| Api::_get_filedata(f, LocationCategory::Local, configuration).ok())
             .collect_vec();
         let files = paths
             .iter()
             .filter(|f| !f.is_dir())
-            .map(|f| f.as_os_str().to_str())
-            .flatten()
+            .filter_map(|f| f.as_os_str().to_str())
             .flat_map(|f| Api::_get_print_metadata(f, LocationCategory::Local, configuration).ok())
             .collect_vec();
 
