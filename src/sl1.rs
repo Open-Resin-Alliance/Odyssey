@@ -80,14 +80,9 @@ impl PrintFile for Sl1 {
     fn from_file(file_data: FileMetadata) -> Sl1 {
         tracing::info!("Loading PrintFile from SL1 {:?}", file_data);
 
-        let full_path = Path::new(file_data.parent_path.as_str()).join(file_data.path.as_str());
+        let file = File::open(file_data.get_full_path()).unwrap();
 
-        let file = File::open(full_path).unwrap();
-
-        
-        let print_count = Sl1::get_print_count(&file);
-        let favorite = Sl1::get_favorite(&file);
-        let rating = Sl1::get_rating(&file);
+        let user_metadata = Sl1::get_user_metadata(&file);
 
         let mut archive = ZipArchive::new(file).unwrap();
 
@@ -115,9 +110,7 @@ impl PrintFile for Sl1 {
             layer_height: config.layer_height,
             layer_height_microns: ((config.layer_height * 1000.0).trunc() as u32),
             layer_count: frame_list.len(),
-            print_count,
-            favorite,
-            rating
+            user_metadata,
         };
 
         Sl1 {

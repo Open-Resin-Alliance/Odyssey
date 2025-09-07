@@ -2,10 +2,9 @@ use std::{
     ffi::OsStr,
     fs::File,
     io::{Error, ErrorKind, Read, Write},
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::Arc,
-    time::{Duration, UNIX_EPOCH},
+    time::Duration,
 };
 
 use futures::{stream::BoxStream, StreamExt};
@@ -14,8 +13,8 @@ use itertools::Itertools;
 use optional_struct::Applicable;
 use poem::{
     error::{
-        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented,
-        ServiceUnavailable, Unauthorized,
+        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotFound,
+        NotImplemented, ServiceUnavailable, Unauthorized,
     },
     listener::TcpListener,
     middleware::Cors,
@@ -42,7 +41,7 @@ use tracing::instrument;
 use crate::{
     api_objects::{
         DisplayTest, FileMetadata, LocationCategory, PhysicalState, PrintMetadata, PrinterState,
-        PrinterStatus, ReleaseVersion, ThumbnailSize,
+        PrinterStatus, ReleaseVersion, ThumbnailSize, UpdatePrintUserMetadata,
     },
     configuration::{ApiConfig, Configuration, UpdateConfiguration},
     printer::Operation,
@@ -81,9 +80,7 @@ impl Api {
     ) -> Result<()> {
         let location = location.unwrap_or(LocationCategory::Local);
 
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
-
-        let file_data = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
+        let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
 
         operation_sender
             .send(Operation::StartPrint { file_data })
@@ -299,9 +296,7 @@ impl Api {
     ) -> Result<()> {
         let location = location.unwrap_or(LocationCategory::Local);
 
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
-
-        let file_data = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
+        let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
 
         operation_sender
             .send(Operation::ManualDisplayLayer { file_data, layer })
@@ -383,7 +378,13 @@ impl Api {
         let files_vec = read_dir
             .map_err(InternalServerError)?
             .flatten()
-            .map(|f| f.path())
+            .map(|f| {
+                f.path()
+                    .strip_prefix(upload_path)
+                    .map(|path_ref| path_ref.to_owned())
+                    .ok()
+            })
+            .flatten()
             // TODO add sorting here
             .filter(|f| f.is_dir() || f.extension().and_then(OsStr::to_str).eq(&Some("sl1")));
 
@@ -398,11 +399,15 @@ impl Api {
         let dirs = paths
             .iter()
             .filter(|f| f.is_dir())
+            .map(|f| f.as_os_str().to_str())
+            .flatten()
             .flat_map(|f| Api::_get_filedata(f, LocationCategory::Local, configuration).ok())
             .collect_vec();
         let files = paths
             .iter()
             .filter(|f| !f.is_dir())
+            .map(|f| f.as_os_str().to_str())
+            .flatten()
             .flat_map(|f| Api::_get_print_metadata(f, LocationCategory::Local, configuration).ok())
             .collect_vec();
 
@@ -474,52 +479,22 @@ impl Api {
     }
 
     fn _get_filedata(
-        target_file: &PathBuf,
+        file_path: &str,
         location: LocationCategory,
         configuration: &ApiConfig,
     ) -> Result<FileMetadata> {
         tracing::info!("Getting file data");
-        let modified_time = target_file
-            .metadata()
-            .ok()
-            .and_then(|meta| meta.modified().ok())
-            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
-            .map(|dur| dur.as_secs());
-
-        let file_size = target_file.metadata().ok().map(|meta| meta.size());
 
         // TODO handle USB _get_filedata
-        Ok(FileMetadata {
-            path: target_file
-                .strip_prefix(configuration.upload_path.as_str())
-                .map_err(InternalServerError)?
-                .to_str()
-                .map(|path_str| path_str.to_string())
-                .ok_or(InternalServerError(Error::new(
-                    ErrorKind::NotFound,
-                    "unable to parse file path",
-                )))?,
-            name: target_file
-                .file_name()
-                .and_then(|path_str| path_str.to_str())
-                .map(|path_str| path_str.to_string())
-                .ok_or(InternalServerError(Error::new(
-                    ErrorKind::NotFound,
-                    "Unable to parse file name",
-                )))?,
-            last_modified: modified_time,
-            file_size,
-            location_category: location,
-            parent_path: configuration.upload_path.clone(),
-        })
+        FileMetadata::from_path(file_path, &configuration.upload_path, location).map_err(NotFound)
     }
 
     fn _get_print_metadata(
-        target_file: &PathBuf,
+        file_path: &str,
         location: LocationCategory,
         configuration: &ApiConfig,
     ) -> Result<PrintMetadata> {
-        let file_data = Api::_get_filedata(target_file, location, configuration)?;
+        let file_data = Api::_get_filedata(file_path, location, configuration)?;
         tracing::info!("Extracting print metadata");
 
         Ok(Sl1::from_file(file_data).get_metadata())
@@ -570,13 +545,38 @@ impl Api {
             file_path,
             location
         );
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
 
         Ok(Json(Api::_get_print_metadata(
-            &full_file_path,
+            &file_path,
             location,
             &configuration.api,
         )?))
+    }
+
+    #[instrument]
+    #[oai(path = "/file/metadata", method = "patch")]
+    async fn patch_file_metadata(
+        &self,
+        Query(file_path): Query<String>,
+        Query(location): Query<Option<LocationCategory>>,
+        Json(patch_metadata): Json<UpdatePrintUserMetadata>,
+        Data(configuration): Data<&Arc<Configuration>>,
+    ) -> Result<Json<PrintMetadata>> {
+        let location = location.unwrap_or(LocationCategory::Local);
+
+        tracing::info!(
+            "Getting file metadata from {:?} in {:?}",
+            file_path,
+            location
+        );
+
+        let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
+        tracing::info!("Extracting print metadata");
+
+        Sl1::set_user_metadata(&file_data.open_file().map_err(NotFound)?, patch_metadata)
+            .map_err(InternalServerError)?;
+
+        Ok(Json(Sl1::from_file(file_data).get_metadata()))
     }
 
     #[instrument]
@@ -592,9 +592,8 @@ impl Api {
         let size = size.unwrap_or(ThumbnailSize::Small);
 
         tracing::info!("Getting thumbnail from {:?} in {:?}", file_path, location);
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
 
-        let file_metadata = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
+        let file_metadata = Api::_get_filedata(&file_path, location, &configuration.api)?;
         tracing::info!("Extracting print thumbnail");
 
         let file_data = Sl1::from_file(file_metadata)
@@ -615,9 +614,8 @@ impl Api {
         let location = location.unwrap_or(LocationCategory::Local);
         tracing::info!("Deleting file {:?} in {:?}", file_path, location);
 
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
-
-        let metadata = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
+        let metadata = Api::_get_filedata(&file_path, location, &configuration.api)?;
+        let full_file_path = metadata.get_full_path();
 
         if full_file_path.is_dir() {
             fs::remove_dir_all(full_file_path)
