@@ -322,7 +322,8 @@ impl Api {
 
         let bytes = file_upload.file.into_vec().await.map_err(BadRequest)?;
 
-        let mut f = File::create(configuration.upload_path.clone() + "/" + &file_name).map_err(InternalServerError)?;
+        let mut f = File::create(configuration.upload_path.clone() + "/" + &file_name)
+            .map_err(InternalServerError)?;
         f.write_all(bytes.as_slice()).map_err(InternalServerError)?;
 
         Ok(())
