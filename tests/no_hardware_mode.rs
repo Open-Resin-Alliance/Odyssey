@@ -51,6 +51,7 @@ fn no_hardware_mode() {
 
     configuration.display.frame_buffer = temp_fb.as_os_str().to_str().unwrap().to_owned();
     configuration.config_file = Some(temp_config.as_os_str().to_str().unwrap().to_owned());
+    configuration.api.upload_path = temp_dir.path().as_os_str().to_str().unwrap().to_owned();
 
     Configuration::overwrite_file(&configuration).expect("Unable to save temporary config file");
 
@@ -117,6 +118,7 @@ pub async fn serial_feedback_loop(
 
     loop {
         if cancellation_token.is_cancelled() {
+            log::info!("Shutting down simulated serial feedback loop");
             break;
         }
         interval.tick().await;
@@ -139,7 +141,7 @@ pub async fn serial_feedback_loop(
             }
             Err(err) => match err {
                 broadcast::error::TryRecvError::Empty => continue,
-                _ => panic!(),
+                _ => (),
             },
         };
     }
