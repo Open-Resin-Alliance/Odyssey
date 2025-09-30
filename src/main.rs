@@ -3,7 +3,6 @@ use std::str::FromStr;
 use clap::Parser;
 
 use serialport::{ClearBuffer, SerialPort};
-use simple_logger::SimpleLogger;
 use tokio::{
     runtime::{Builder, Runtime},
     sync::{broadcast, mpsc},
@@ -19,6 +18,7 @@ use odyssey::{
     serial_handler,
     shutdown_handler::ShutdownHandler,
 };
+use tracing::level_filters::LevelFilter;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -35,12 +35,11 @@ fn main() {
 
     let args = Args::parse();
 
-    SimpleLogger::new()
-        .with_level(log::LevelFilter::from_str(&args.loglevel).expect("Unable to parse loglevel"))
-        .init()
-        .unwrap();
+    tracing_subscriber::fmt()
+        .with_max_level(LevelFilter::from_str(&args.loglevel).expect("Unable to parse loglevel"))
+        .init();
 
-    log::info!("Starting Odyssey");
+    tracing::info!("Starting Odyssey");
 
     let configuration = Configuration::from_file(args.config)
         .expect("Config could not be parsed. See example odyssey.yaml for expected fields:");

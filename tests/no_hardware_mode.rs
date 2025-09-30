@@ -10,7 +10,6 @@ use odyssey::{
     printer::{Operation, Printer},
     shutdown_handler::ShutdownHandler,
 };
-use simple_logger::SimpleLogger;
 use tokio::{
     runtime::{Builder, Runtime},
     sync::{
@@ -20,6 +19,7 @@ use tokio::{
     time::interval,
 };
 use tokio_util::sync::CancellationToken;
+use tracing::Level;
 
 mod common;
 
@@ -31,10 +31,9 @@ mod common;
 fn no_hardware_mode() {
     let shutdown_handler = ShutdownHandler::new();
 
-    SimpleLogger::new()
-        .with_level(log::LevelFilter::Debug)
-        .init()
-        .unwrap();
+    tracing_subscriber::fmt()
+        .with_max_level(Level::TRACE)
+        .init();
 
     let temp_dir = tempfile::TempDir::new().expect("Unable to create temp directory for test");
 
@@ -42,7 +41,7 @@ fn no_hardware_mode() {
     let temp_fb = temp_dir.path().join("mockFb");
     fs::File::create(&temp_fb).expect("Unable to generate mock FrameBuffer file");
 
-    log::info!("Write frames to {}", temp_fb.display());
+    tracing::info!("Write frames to {}", temp_fb.display());
 
     let (serial_read_sender, serial_read_receiver) = broadcast::channel(200);
     let (serial_write_sender, serial_write_receiver) = broadcast::channel(200);
@@ -103,7 +102,7 @@ fn no_hardware_mode() {
         let _ = api_handle.await;
 
         temp_dir.close().expect("Unable to remove tempdir");
-        log::info!("Exiting Test");
+        tracing::info!("Shutting down");
     });
 
     runtime.shutdown_background();
@@ -125,7 +124,7 @@ pub async fn serial_feedback_loop(
         interval.tick().await;
         match receiver.try_recv() {
             Ok(command) => {
-                log::info!("{}", command);
+                tracing::info!("{}", command);
 
                 let response: String;
                 if command.as_str().trim() == configuration.gcode.status_check.as_str().trim() {
@@ -134,7 +133,7 @@ pub async fn serial_feedback_loop(
                     response = configuration.gcode.move_sync.clone();
                 };
 
-                log::info!("command='{}', response='{}'", command.trim(), response);
+                tracing::info!("command='{}', response='{}'", command.trim(), response);
 
                 sender
                     .send(response)

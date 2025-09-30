@@ -33,7 +33,7 @@ pub async fn run_listener(
             },
             Ok(n) => {
                 if n > 0 {
-                    log::debug!("Read {} bytes from serial: {}", n, read_string.trim_end());
+                    tracing::debug!("Read {} bytes from serial: {}", n, read_string.trim_end());
                     sender
                         .send(read_string)
                         .expect("Unable to send message to channel");
@@ -77,6 +77,6 @@ async fn send_serial(serial_port: &mut TTYPort, message: String) -> io::Result<u
         .flush()
         .expect("Unable to flush serial connection");
 
-    log::trace!("Wrote {} bytes", n);
+    tracing::trace!("Wrote {} bytes", n);
     Ok(n)
 }

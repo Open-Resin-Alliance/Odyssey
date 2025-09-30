@@ -162,7 +162,7 @@ impl<T: HardwareControl> Printer<T> {
         wait_before_exposure: f64,
         wait_after_exposure: f64,
     ) {
-        log::info!("Begin layer {}", layer);
+        tracing::info!("Begin layer {}", layer);
         self.wrapped_start_layer(layer).await;
         let layer_z = ((layer + 1) as u32) * layer_height;
         //let lift_z = layer_z+
@@ -170,27 +170,27 @@ impl<T: HardwareControl> Printer<T> {
         let exposure_time = cur_frame.exposure_time;
 
         // Move the plate up first, then down into position
-        log::info!("Moving to layer position {}", layer_z);
+        tracing::info!("Moving to layer position {}", layer_z);
 
         self.wrapped_move(layer_z + lift, up_speed).await;
         self.wrapped_move(layer_z, down_speed).await;
 
         // Wait for configured time before curing
-        log::info!("Waiting for {}s before cure", wait_before_exposure);
+        tracing::info!("Waiting for {}s before cure", wait_before_exposure);
         sleep(Duration::from_secs_f64(wait_before_exposure)).await;
 
         // Display the current frame to the LCD
-        log::info!("Loading layer to display");
+        tracing::info!("Loading layer to display");
         self.display.display_frame(cur_frame);
 
         // Activate the UV array for the prescribed length of time
-        log::info!("Curing layer for {}s", exposure_time);
+        tracing::info!("Curing layer for {}s", exposure_time);
         self.wrapped_start_cure().await;
         sleep(Duration::from_secs_f64(exposure_time)).await;
         self.wrapped_stop_cure().await;
 
         // Wait for configured time after curing
-        log::info!("Waiting for {}s after cure", wait_after_exposure);
+        tracing::info!("Waiting for {}s after cure", wait_after_exposure);
         sleep(Duration::from_secs_f64(wait_after_exposure)).await;
     }
 
@@ -268,7 +268,7 @@ impl<T: HardwareControl> Printer<T> {
     }
 
     pub async fn start_print(&mut self, file_data: FileMetadata) {
-        log::info!("Starting Print");
+        tracing::info!("Starting Print");
 
         let print_data = Sl1::from_file(file_data).get_metadata();
         self.enter_printing_state(print_data).await;
@@ -281,7 +281,7 @@ impl<T: HardwareControl> Printer<T> {
             self.hardware_controller
                 .remove_print_variable("layer".to_string());
             self.update_idle_state(physical_state).await;
-            log::info!("Print complete.");
+            tracing::info!("Print complete.");
         } else {
             self.shutdown().await;
         }
@@ -330,16 +330,16 @@ impl<T: HardwareControl> Printer<T> {
         let optional_frame = Frame::from_layer(file.get_layer_data(layer).await).await;
 
         if let Some(frame) = optional_frame {
-            log::info!("Loading layer {} from {} to display", layer, file_data.name);
+            tracing::info!("Loading layer {} from {} to display", layer, file_data.name);
             self.display.display_frame(frame);
         }
     }
 
     async fn enter_printing_state(&mut self, print_data: PrintMetadata) {
-        log::info!("Entering printing state");
+        tracing::info!("Entering printing state");
         match self.state.status {
             PrinterStatus::Idle => {
-                log::debug!("Transitioning from Idle State");
+                tracing::debug!("Transitioning from Idle State");
                 self.state = PrinterState {
                     print_data: Some(print_data),
                     paused: Some(false),
@@ -349,10 +349,10 @@ impl<T: HardwareControl> Printer<T> {
                 };
             }
             PrinterStatus::Printing => {
-                log::debug!("Already in printing state!");
+                tracing::debug!("Already in printing state!");
             }
             PrinterStatus::Shutdown => {
-                log::debug!("Cannot start print, Odyssey shutdown");
+                tracing::debug!("Cannot start print, Odyssey shutdown");
             }
         }
     }
@@ -408,7 +408,7 @@ impl<T: HardwareControl> Printer<T> {
     }
 
     pub async fn boot(&mut self) {
-        log::info!("Booting up printer.");
+        tracing::info!("Booting up printer.");
 
         let boot_result: Result<PhysicalState, std::io::Error> =
             self.hardware_controller.boot().await;
@@ -421,7 +421,7 @@ impl<T: HardwareControl> Printer<T> {
 
     pub async fn _verify_hardware(&mut self) -> bool {
         if !self.hardware_controller.is_ready().await {
-            log::error!("Hardware controller no longer ready! Shutting down Odyssey");
+            tracing::error!("Hardware controller no longer ready! Shutting down Odyssey");
             self.shutdown().await;
             return false;
         }
@@ -429,13 +429,13 @@ impl<T: HardwareControl> Printer<T> {
     }
 
     pub async fn shutdown(&mut self) {
-        log::info!("Initiating shutdown.");
+        tracing::info!("Shutting down.");
         // If hardware still running, execute shutdown commands
         if self.hardware_controller.is_ready().await {
             if (self.hardware_controller.shutdown().await).is_ok() {
-                log::info!("Shut down gcode executed successfully")
+                tracing::info!("Shut down gcode executed successfully")
             } else {
-                log::error!("Unable to execute shutdown gcode")
+                tracing::info!("Unable to execute shutdown gcode")
             }
         }
 
