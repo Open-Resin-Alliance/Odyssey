@@ -120,6 +120,7 @@ pub async fn serial_feedback_loop(
 
     loop {
         if cancellation_token.is_cancelled() {
+            log::info!("Shutting down simulated serial feedback loop");
             break;
         }
         interval.tick().await;
@@ -142,7 +143,7 @@ pub async fn serial_feedback_loop(
             }
             Err(err) => match err {
                 broadcast::error::TryRecvError::Empty => continue,
-                _ => panic!(),
+                _ => (),
             },
         };
     }
