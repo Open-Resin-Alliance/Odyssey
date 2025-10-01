@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use clap::Parser;
 
@@ -41,11 +41,13 @@ fn main() {
 
     tracing::info!("Starting Odyssey");
 
-    let configuration = Configuration::from_file(args.config)
-        .expect("Config could not be parsed. See example odyssey.yaml for expected fields:");
+    let configuration = Arc::new(
+        Configuration::from_file(args.config)
+            .expect("Config could not be parsed. See example odyssey.yaml for expected fields:"),
+    );
 
     let mut serial = tokio_serial::new(
-        configuration.printer.serial.clone(),
+        &configuration.printer.serial,
         configuration.printer.baudrate,
     )
     .open_native()
@@ -74,45 +76,45 @@ fn main() {
 
     let runtime = build_runtime();
 
+    let sender = operation_channel.0.clone();
+    let receiver = status_channel.1.resubscribe();
+
+    let writer_serial = serial
+        .try_clone_native()
+        .expect("Unable to clone serial port handler");
+    let listener_serial = serial
+        .try_clone_native()
+        .expect("Unable to clone serial port handler");
+
+    let serial_read_handle = tokio::spawn(serial_handler::run_listener(
+        listener_serial,
+        serial_read_sender,
+        shutdown_handler.cancellation_token.clone(),
+    ));
+
+    let serial_write_handle = tokio::spawn(serial_handler::run_writer(
+        writer_serial,
+        serial_write_receiver,
+        shutdown_handler.cancellation_token.clone(),
+    ));
+
+    let statemachine_handle = tokio::spawn(Printer::start_printer(
+        configuration.clone(),
+        display,
+        gcode,
+        operation_channel.1,
+        status_channel.0.clone(),
+        shutdown_handler.cancellation_token.clone(),
+    ));
+
+    let api_handle = tokio::spawn(api::start_api(
+        configuration.clone(),
+        sender,
+        receiver,
+        shutdown_handler.cancellation_token.clone(),
+    ));
+
     runtime.block_on(async {
-        let sender = operation_channel.0.clone();
-        let receiver = status_channel.1.resubscribe();
-
-        let writer_serial = serial
-            .try_clone_native()
-            .expect("Unable to clone serial port handler");
-        let listener_serial = serial
-            .try_clone_native()
-            .expect("Unable to clone serial port handler");
-
-        let serial_read_handle = tokio::spawn(serial_handler::run_listener(
-            listener_serial,
-            serial_read_sender,
-            shutdown_handler.cancellation_token.clone(),
-        ));
-
-        let serial_write_handle = tokio::spawn(serial_handler::run_writer(
-            writer_serial,
-            serial_write_receiver,
-            shutdown_handler.cancellation_token.clone(),
-        ));
-
-        let statemachine_handle = tokio::spawn(Printer::start_printer(
-            configuration.printer.clone(),
-            display,
-            gcode,
-            operation_channel.1,
-            status_channel.0.clone(),
-            shutdown_handler.cancellation_token.clone(),
-        ));
-
-        let api_handle = tokio::spawn(api::start_api(
-            configuration,
-            sender,
-            receiver,
-            shutdown_handler.cancellation_token.clone(),
-        ));
-
         shutdown_handler.until_shutdown().await;
 
         let _ = serial_read_handle.await;
