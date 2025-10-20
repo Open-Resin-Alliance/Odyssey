@@ -1,4 +1,4 @@
-use std::{fs::File, io::Error};
+use std::{fs::File, io::{self, Error}};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ pub struct Layer {
 
 #[async_trait]
 pub trait PrintFile {
-    fn from_file(file_data: FileMetadata) -> Self
+    fn from_file(file_data: FileMetadata) -> Result<Self,io::Error>
     where
         Self: Sized;
     async fn get_layer_data(&mut self, index: usize) -> Option<Layer>;

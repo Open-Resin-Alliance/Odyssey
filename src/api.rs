@@ -70,6 +70,8 @@ struct Api;
 
 #[OpenApi]
 impl Api {
+    
+    #[instrument]
     #[oai(path = "/print/start", method = "post")]
     async fn start_print(
         &self,
@@ -215,16 +217,16 @@ impl Api {
             .map_err(InternalServerError)??)
     }
 
-    #[instrument(skip(z, cure))]
+    #[instrument]
     #[oai(path = "/manual", method = "post")]
     async fn manual_control(
         &self,
-        z: Query<Option<f64>>,
-        cure: Query<Option<bool>>,
+        Query(z): Query<Option<f64>>,
+        Query(cure): Query<Option<bool>>,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
         Data(_state_ref): Data<&Arc<RwLock<PrinterState>>>,
     ) -> Result<()> {
-        if let Query(Some(z)) = z {
+        if let Some(z) = z {
             operation_sender
                 .send(Operation::ManualMove {
                     z: (z * 1000.0).trunc() as u32,
@@ -233,7 +235,7 @@ impl Api {
                 .map_err(ServiceUnavailable)?;
         }
 
-        if let Query(Some(cure)) = cure {
+        if let Some(cure) = cure {
             operation_sender
                 .send(Operation::ManualCure { cure })
                 .await
@@ -284,7 +286,7 @@ impl Api {
             .map_err(ServiceUnavailable)?;
         Ok(())
     }
-    #[instrument]
+    #[instrument(ret,skip(configuration))]
     #[oai(path = "/manual/display_layer", method = "post")]
     async fn manual_display_layer(
         &self,
@@ -303,7 +305,7 @@ impl Api {
             .await
             .map_err(ServiceUnavailable)
     }
-    #[instrument]
+    #[instrument(ret,skip(configuration))]
     #[oai(path = "/files", method = "post")]
     async fn upload_file(
         &self,
@@ -326,7 +328,7 @@ impl Api {
 
         Ok(())
     }
-    #[instrument]
+    #[instrument(ret,skip(configuration))]
     #[oai(path = "/files", method = "get")]
     async fn get_files(
         &self,
@@ -340,13 +342,6 @@ impl Api {
         let page_index = page_index.unwrap_or(DEFAULT_PAGE_INDEX);
         let page_size = page_size.unwrap_or(DEFAULT_PAGE_SIZE);
 
-        tracing::info!(
-            "Getting files in location={:?}, subdirectory={:?}, page_index={:?}, page_size={:?}",
-            location,
-            subdirectory,
-            page_index,
-            page_size
-        );
 
         match location {
             LocationCategory::Local => {
@@ -494,9 +489,9 @@ impl Api {
         let file_data = Api::_get_filedata(file_path, location, configuration)?;
         tracing::info!("Extracting print metadata");
 
-        Ok(Sl1::from_file(file_data).get_metadata())
+        Ok(Sl1::from_file(file_data).map_err(NotFound)?.get_metadata())
     }
-    #[instrument]
+    #[instrument(ret,skip(configuration))]
     #[oai(path = "/file", method = "get")]
     async fn get_file(
         &self,
@@ -527,7 +522,7 @@ impl Api {
 
         Ok(Attachment::new(data).filename(file_name))
     }
-    #[instrument]
+    #[instrument(ret,skip(configuration))]
     #[oai(path = "/file/metadata", method = "get")]
     async fn get_file_metadata(
         &self,
@@ -537,12 +532,6 @@ impl Api {
     ) -> Result<Json<PrintMetadata>> {
         let location = location.unwrap_or(LocationCategory::Local);
 
-        tracing::info!(
-            "Getting file metadata from {:?} in {:?}",
-            file_path,
-            location
-        );
-
         Ok(Json(Api::_get_print_metadata(
             &file_path,
             location,
@@ -550,7 +539,7 @@ impl Api {
         )?))
     }
 
-    #[instrument]
+    #[instrument(ret,skip(configuration))]
     #[oai(path = "/file/metadata", method = "patch")]
     async fn patch_file_metadata(
         &self,
@@ -573,10 +562,10 @@ impl Api {
         Sl1::set_user_metadata(&file_data.open_file().map_err(NotFound)?, patch_metadata)
             .map_err(InternalServerError)?;
 
-        Ok(Json(Sl1::from_file(file_data).get_metadata()))
+        Ok(Json(Sl1::from_file(file_data).map_err(NotFound)?.get_metadata()))
     }
 
-    #[instrument]
+    #[instrument(ret,skip(configuration))]
     #[oai(path = "/file/thumbnail", method = "get")]
     async fn get_thumbnail(
         &self,
@@ -594,13 +583,14 @@ impl Api {
         tracing::info!("Extracting print thumbnail");
 
         let file_data = Sl1::from_file(file_metadata)
+            .map_err(NotFound)?
             .get_thumbnail(size)
             .map_err(InternalServerError)?;
 
         Ok(Attachment::new(file_data.data).filename(file_data.name))
     }
 
-    #[instrument]
+    #[instrument(ret,skip(configuration))]
     #[oai(path = "/file", method = "delete")]
     async fn delete_file(
         &self,
@@ -652,6 +642,7 @@ pub async fn start_api(
     operation_sender: mpsc::Sender<Operation>,
     state_receiver: broadcast::Receiver<PrinterState>,
     cancellation_token: CancellationToken,
+    apidocs: bool
 ) {
     let state_ref = Arc::new(RwLock::new(PrinterState {
         print_data: None,
@@ -678,7 +669,7 @@ pub async fn start_api(
 
     let mut app = Route::new().nest("/", api_service);
 
-    if cfg!(debug_assertions) {
+    if apidocs || cfg!(debug_assertions) {
         app = app.nest("/docs", ui);
     }
 

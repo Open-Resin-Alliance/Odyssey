@@ -28,6 +28,8 @@ struct Args {
     config: String,
     #[arg(default_value_t=String::from("DEBUG"), short, long)]
     loglevel: String,
+    #[arg(default_value_t=false, short, long)]
+    apidocs: bool,
 }
 
 fn main() {
@@ -86,19 +88,19 @@ fn main() {
         .try_clone_native()
         .expect("Unable to clone serial port handler");
 
-    let serial_read_handle = tokio::spawn(serial_handler::run_listener(
+    let serial_read_handle = runtime.spawn(serial_handler::run_listener(
         listener_serial,
         serial_read_sender,
         shutdown_handler.cancellation_token.clone(),
     ));
 
-    let serial_write_handle = tokio::spawn(serial_handler::run_writer(
+    let serial_write_handle = runtime.spawn(serial_handler::run_writer(
         writer_serial,
         serial_write_receiver,
         shutdown_handler.cancellation_token.clone(),
     ));
 
-    let statemachine_handle = tokio::spawn(Printer::start_printer(
+    let statemachine_handle = runtime.spawn(Printer::start_printer(
         configuration.clone(),
         display,
         gcode,
@@ -107,11 +109,12 @@ fn main() {
         shutdown_handler.cancellation_token.clone(),
     ));
 
-    let api_handle = tokio::spawn(api::start_api(
+    let api_handle = runtime.spawn(api::start_api(
         configuration.clone(),
         sender,
         receiver,
         shutdown_handler.cancellation_token.clone(),
+        args.apidocs
     ));
 
     runtime.block_on(async {

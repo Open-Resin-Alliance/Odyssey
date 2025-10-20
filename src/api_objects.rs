@@ -1,5 +1,4 @@
 use std::{
-    error::Error,
     fs::File,
     io,
     path::{Path, PathBuf},
@@ -27,7 +26,7 @@ pub struct FileMetadata {
     pub path: String,
     pub name: String,
     pub last_modified: Option<u64>,
-    pub file_size: Option<u64>,
+    pub file_size: u64,
     pub location_category: LocationCategory,
     pub parent_path: String,
 }
@@ -43,15 +42,13 @@ impl FileMetadata {
     {
         let path = Path::new(parent_path).join(file_path);
 
-        let metadata = path.metadata().ok();
+        let metadata = path.metadata()?;
 
-        let modified_time = metadata
-            .as_ref()
-            .and_then(|meta| meta.modified().ok())
+        let modified_time = metadata.modified().ok()
             .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
             .map(|dur| dur.as_secs());
 
-        let file_size = metadata.as_ref().map(|meta| meta.len());
+        let file_size = metadata.len();
 
         let name = path
             .file_name()
