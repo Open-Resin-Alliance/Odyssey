@@ -70,7 +70,7 @@ struct Api;
 
 #[OpenApi]
 impl Api {
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/print/start", method = "post")]
     async fn start_print(
         &self,
@@ -89,7 +89,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/print/pause", method = "post")]
     async fn pause_print(
         &self,
@@ -101,7 +101,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/print/resume", method = "post")]
     async fn resume_print(
         &self,
@@ -113,7 +113,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/print/cancel", method = "post")]
     async fn cancel_print(
         &self,
@@ -125,7 +125,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/shutdown", method = "post")]
     async fn shutdown(&self, Data(operation_sender): Data<&mpsc::Sender<Operation>>) -> Result<()> {
         operation_sender
@@ -133,7 +133,7 @@ impl Api {
             .await
             .map_err(ServiceUnavailable)
     }
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/status", method = "get")]
     async fn get_status(
         &self,
@@ -166,7 +166,7 @@ impl Api {
             .boxed()
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/config", method = "get")]
     async fn get_config(
         &self,
@@ -175,7 +175,7 @@ impl Api {
         Json(full_config.as_ref().clone())
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/config", method = "patch")]
     async fn patch_config(
         &self,
@@ -188,7 +188,7 @@ impl Api {
         Ok(Json(ammend_config))
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/update/releases", method = "get")]
     async fn get_releases(&self) -> Result<Json<Vec<ReleaseVersion>>> {
         let releases_result = spawn_blocking(updates::get_releases)
@@ -208,7 +208,7 @@ impl Api {
         ))
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/update", method = "post")]
     async fn update(&self, Query(release): Query<String>) -> Result<()> {
         Ok(spawn_blocking(|| updates::update(release))
@@ -216,7 +216,7 @@ impl Api {
             .map_err(InternalServerError)??)
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/manual", method = "post")]
     async fn manual_control(
         &self,
@@ -243,7 +243,7 @@ impl Api {
 
         Ok(())
     }
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/manual/home", method = "post")]
     async fn manual_home(
         &self,
@@ -257,7 +257,7 @@ impl Api {
 
         Ok(())
     }
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/manual/hardware_command", method = "post")]
     async fn manual_command(
         &self,
@@ -272,7 +272,7 @@ impl Api {
 
         Ok(())
     }
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/manual/display_test", method = "post")]
     async fn manual_display_test(
         &self,
