@@ -44,7 +44,9 @@ impl FileMetadata {
 
         let metadata = path.metadata()?;
 
-        let modified_time = metadata.modified().ok()
+        let modified_time = metadata
+            .modified()
+            .ok()
             .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
             .map(|dur| dur.as_secs());
 

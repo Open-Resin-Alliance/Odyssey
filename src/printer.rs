@@ -274,7 +274,7 @@ impl<T: HardwareControl> Printer<'_, T> {
         self.update_layer(layer).await;
     }
 
-    pub async fn start_print(&mut self, file_data: FileMetadata) -> Result<(),io::Error>{
+    pub async fn start_print(&mut self, file_data: FileMetadata) -> Result<(), io::Error> {
         tracing::info!("Starting Print");
 
         let print_data = Sl1::from_file(file_data)?.get_metadata();
@@ -332,7 +332,11 @@ impl<T: HardwareControl> Printer<'_, T> {
             .map(|print_data| print_data.file_data)
     }
 
-    async fn display_file_layer(&mut self, file_data: FileMetadata, layer: usize) -> Result<(),io::Error> {
+    async fn display_file_layer(
+        &mut self,
+        file_data: FileMetadata,
+        layer: usize,
+    ) -> Result<(), io::Error> {
         let mut file: Box<dyn PrintFile + Send> = Box::new(Sl1::from_file(file_data.clone())?);
 
         let optional_frame = Frame::from_layer(file.get_layer_data(layer).await).await;
@@ -488,7 +492,10 @@ impl<T: HardwareControl> Printer<'_, T> {
             }
             match self.state.status {
                 PrinterStatus::Idle => self.idle_event_loop().await,
-                PrinterStatus::Printing => self.print_event_loop().await.expect("Unexpected error during print"),
+                PrinterStatus::Printing => self
+                    .print_event_loop()
+                    .await
+                    .expect("Unexpected error during print"),
                 PrinterStatus::Shutdown => self.shutdown_event_loop().await,
             }
 
@@ -545,7 +552,9 @@ impl<T: HardwareControl> Printer<'_, T> {
         while let Ok(operation) = op_result {
             match operation {
                 Operation::QueryState => self.send_status().await,
-                Operation::StartPrint { file_data } => self.start_print(file_data).await.unwrap_or(()),
+                Operation::StartPrint { file_data } => {
+                    self.start_print(file_data).await.unwrap_or(())
+                }
                 Operation::ManualCommand { command } => self.wrapped_command(command).await,
                 Operation::ManualHome => self.wrapped_home().await,
                 Operation::ManualMove { z } => {
@@ -562,7 +571,9 @@ impl<T: HardwareControl> Printer<'_, T> {
                     self.display.display_test(test);
                 }
                 Operation::ManualDisplayLayer { file_data, layer } => {
-                    self.display_file_layer(file_data, layer).await.unwrap_or(());
+                    self.display_file_layer(file_data, layer)
+                        .await
+                        .unwrap_or(());
                 }
                 Operation::Shutdown => self.shutdown().await,
                 _ => (),

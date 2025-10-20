@@ -70,7 +70,6 @@ struct Api;
 
 #[OpenApi]
 impl Api {
-    
     #[instrument]
     #[oai(path = "/print/start", method = "post")]
     async fn start_print(
@@ -286,7 +285,7 @@ impl Api {
             .map_err(ServiceUnavailable)?;
         Ok(())
     }
-    #[instrument(ret,skip(configuration))]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/manual/display_layer", method = "post")]
     async fn manual_display_layer(
         &self,
@@ -305,7 +304,7 @@ impl Api {
             .await
             .map_err(ServiceUnavailable)
     }
-    #[instrument(ret,skip(configuration))]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/files", method = "post")]
     async fn upload_file(
         &self,
@@ -328,7 +327,7 @@ impl Api {
 
         Ok(())
     }
-    #[instrument(ret,skip(configuration))]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/files", method = "get")]
     async fn get_files(
         &self,
@@ -341,7 +340,6 @@ impl Api {
         let location = location.unwrap_or(LocationCategory::Local);
         let page_index = page_index.unwrap_or(DEFAULT_PAGE_INDEX);
         let page_size = page_size.unwrap_or(DEFAULT_PAGE_SIZE);
-
 
         match location {
             LocationCategory::Local => {
@@ -491,7 +489,7 @@ impl Api {
 
         Ok(Sl1::from_file(file_data).map_err(NotFound)?.get_metadata())
     }
-    #[instrument(ret,skip(configuration))]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/file", method = "get")]
     async fn get_file(
         &self,
@@ -522,7 +520,7 @@ impl Api {
 
         Ok(Attachment::new(data).filename(file_name))
     }
-    #[instrument(ret,skip(configuration))]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/file/metadata", method = "get")]
     async fn get_file_metadata(
         &self,
@@ -539,7 +537,7 @@ impl Api {
         )?))
     }
 
-    #[instrument(ret,skip(configuration))]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/file/metadata", method = "patch")]
     async fn patch_file_metadata(
         &self,
@@ -562,10 +560,12 @@ impl Api {
         Sl1::set_user_metadata(&file_data.open_file().map_err(NotFound)?, patch_metadata)
             .map_err(InternalServerError)?;
 
-        Ok(Json(Sl1::from_file(file_data).map_err(NotFound)?.get_metadata()))
+        Ok(Json(
+            Sl1::from_file(file_data).map_err(NotFound)?.get_metadata(),
+        ))
     }
 
-    #[instrument(ret,skip(configuration))]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/file/thumbnail", method = "get")]
     async fn get_thumbnail(
         &self,
@@ -590,7 +590,7 @@ impl Api {
         Ok(Attachment::new(file_data.data).filename(file_data.name))
     }
 
-    #[instrument(ret,skip(configuration))]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/file", method = "delete")]
     async fn delete_file(
         &self,
@@ -642,7 +642,7 @@ pub async fn start_api(
     operation_sender: mpsc::Sender<Operation>,
     state_receiver: broadcast::Receiver<PrinterState>,
     cancellation_token: CancellationToken,
-    apidocs: bool
+    apidocs: bool,
 ) {
     let state_ref = Arc::new(RwLock::new(PrinterState {
         print_data: None,

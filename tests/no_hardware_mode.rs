@@ -92,7 +92,7 @@ fn no_hardware_mode() {
         sender,
         receiver,
         shutdown_handler.cancellation_token.clone(),
-        true
+        true,
     ));
 
     runtime.block_on(async {

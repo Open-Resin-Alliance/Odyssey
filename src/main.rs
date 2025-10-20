@@ -28,7 +28,7 @@ struct Args {
     config: String,
     #[arg(default_value_t=String::from("DEBUG"), short, long)]
     loglevel: String,
-    #[arg(default_value_t=false, short, long)]
+    #[arg(default_value_t = false, short, long)]
     apidocs: bool,
 }
 
@@ -114,7 +114,7 @@ fn main() {
         sender,
         receiver,
         shutdown_handler.cancellation_token.clone(),
-        args.apidocs
+        args.apidocs,
     ));
 
     runtime.block_on(async {

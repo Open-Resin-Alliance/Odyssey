@@ -76,7 +76,7 @@ pub struct Sl1 {
 #[async_trait]
 impl PrintFile for Sl1 {
     /// Instantiate the Sl1 from the given file
-    fn from_file(file_data: FileMetadata) -> Result<Sl1,io::Error> {
+    fn from_file(file_data: FileMetadata) -> Result<Sl1, io::Error> {
         tracing::info!("Loading PrintFile from SL1 {:?}", file_data);
 
         let file = File::open(file_data.get_full_path())?;
