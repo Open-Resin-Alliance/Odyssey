@@ -55,7 +55,10 @@ fn no_hardware_mode() {
     let config = Arc::new(configuration);
 
     let mut serial_handler = MockSerialHandler::new(config.gcode.move_sync.clone());
-    serial_handler.add_response(config.gcode.status_check.trim().to_string(), config.gcode.status_desired.trim().to_string());
+    serial_handler.add_response(
+        config.gcode.status_check.trim().to_string(),
+        config.gcode.status_desired.trim().to_string(),
+    );
 
     odyssey::start_odyssey(build_runtime(), config, Box::new(serial_handler));
 }

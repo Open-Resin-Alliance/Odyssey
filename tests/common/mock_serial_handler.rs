@@ -43,13 +43,18 @@ impl SerialHandler for MockSerialHandler {
             interval.tick().await;
 
             if let Some(message) = self.internal_comms.try_receive().await? {
-                let response = self.response_map.get(message.trim()).map(|resp|resp.to_string()).unwrap_or(self.default_response.clone());
-                
-                tracing::debug!("Received message={}, emitting response={}", message,response);
-                self.internal_comms
-                    .send(response)
-                    .await?
-            
+                let response = self
+                    .response_map
+                    .get(message.trim())
+                    .map(|resp| resp.to_string())
+                    .unwrap_or(self.default_response.clone());
+
+                tracing::debug!(
+                    "Received message={}, emitting response={}",
+                    message,
+                    response
+                );
+                self.internal_comms.send(response).await?
             }
 
             if cancellation_token.is_cancelled() {
