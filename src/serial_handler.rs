@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 use serialport::TTYPort;
-use std::error::Error;
 use std::io::{self, BufRead, BufReader, Write};
-use tokio::sync::broadcast::error::{RecvError, TryRecvError};
+use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::time::{interval, timeout, Duration};
 use tokio_util::sync::CancellationToken;
@@ -25,6 +24,12 @@ impl Clone for InternalCommsHandler {
             incoming_sender: self.incoming_sender.clone(),
             incoming_receiver: self.incoming_receiver.resubscribe(),
         }
+    }
+}
+
+impl Default for InternalCommsHandler {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -94,7 +99,7 @@ impl InternalCommsHandler {
         self.receive()
             .await
             .map(|msg| msg.contains(expected))
-            .map_err(|err| err.into())
+            .map_err(|err| err)
     }
     pub async fn await_response(
         &mut self,

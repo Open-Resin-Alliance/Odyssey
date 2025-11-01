@@ -1,18 +1,15 @@
 use core::panic;
 use std::collections::HashMap;
-use std::io::{Error, ErrorKind};
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use regex::Regex;
-use tokio::sync::broadcast;
-use tokio::time::{interval, sleep, Duration};
+use tokio::time::Duration;
 
 use crate::api_objects::PhysicalState;
 use crate::configuration::GcodeConfig;
 use crate::error::OdysseyError;
 use crate::printer::HardwareControl;
-use crate::serial_handler::{InternalCommsHandler, SerialHandler};
+use crate::serial_handler::InternalCommsHandler;
 
 pub struct Gcode {
     pub config: GcodeConfig,

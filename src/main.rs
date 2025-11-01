@@ -3,20 +3,11 @@ use std::{str::FromStr, sync::Arc};
 use clap::Parser;
 
 use serialport::{ClearBuffer, SerialPort};
-use tokio::{
-    runtime::{Builder, Runtime},
-    sync::{broadcast, mpsc},
-};
+use tokio::runtime::{Builder, Runtime};
 
 use odyssey::{
-    api,
-    api_objects::PrinterState,
     configuration::Configuration,
-    display::PrintDisplay,
-    gcode::Gcode,
-    printer::{Operation, Printer},
-    serial_handler::{self, SerialHandler, TTYPortHandler},
-    shutdown_handler::ShutdownHandler,
+    serial_handler::TTYPortHandler,
 };
 use tracing::level_filters::LevelFilter;
 

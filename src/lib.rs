@@ -7,10 +7,9 @@ use crate::{
     serial_handler::SerialHandler,
     shutdown_handler::ShutdownHandler,
 };
-use serialport::{ClearBuffer, SerialPort};
 use std::sync::Arc;
 use tokio::{
-    runtime::{Builder, Runtime},
+    runtime::Runtime,
     sync::{broadcast, mpsc},
 };
 
