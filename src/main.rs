@@ -5,10 +5,7 @@ use clap::Parser;
 use serialport::{ClearBuffer, SerialPort};
 use tokio::runtime::{Builder, Runtime};
 
-use odyssey::{
-    configuration::Configuration,
-    serial_handler::TTYPortHandler,
-};
+use odyssey::{configuration::Configuration, serial_handler::TTYPortHandler};
 use tracing::level_filters::LevelFilter;
 
 #[derive(Parser, Debug)]

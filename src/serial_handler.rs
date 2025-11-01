@@ -96,10 +96,7 @@ impl InternalCommsHandler {
     }
 
     pub async fn check_response(&mut self, expected: &String) -> Result<bool, OdysseyError> {
-        self.receive()
-            .await
-            .map(|msg| msg.contains(expected))
-            .map_err(|err| err)
+        self.receive().await.map(|msg| msg.contains(expected))
     }
     pub async fn await_response(
         &mut self,

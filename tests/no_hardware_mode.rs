@@ -1,21 +1,10 @@
 use std::{fs, sync::Arc, time::Duration};
 
 use crate::common::{mock_serial_handler::MockSerialHandler, test_resource_path};
-use odyssey::{
-    api,
-    api_objects::PrinterState,
-    configuration::Configuration,
-    display::PrintDisplay,
-    gcode::Gcode,
-    printer::{Operation, Printer},
-    shutdown_handler::ShutdownHandler,
-};
+use odyssey::configuration::Configuration;
 use tokio::{
     runtime::{Builder, Runtime},
-    sync::{
-        broadcast::{self, Receiver, Sender},
-        mpsc,
-    },
+    sync::broadcast::{self, Receiver, Sender},
     time::interval,
 };
 use tokio_util::sync::CancellationToken;
@@ -23,14 +12,22 @@ use tracing::Level;
 
 mod common;
 
-/**
- * Run Odyssey without any hardware. This is a manual testing utility, not an automated test.
- */
+#[test]
+#[ignore]
+fn no_hardware_tmp() {
+    _no_hardware_mode(true);
+}
+
 #[test]
 #[ignore]
 fn no_hardware_mode() {
-    let shutdown_handler = ShutdownHandler::new();
+    _no_hardware_mode(false);
+}
 
+/**
+ * Run Odyssey without any hardware. This is a manual testing utility, not an automated test.
+ */
+fn _no_hardware_mode(temp_uploads: bool) {
     tracing_subscriber::fmt()
         .with_max_level(Level::TRACE)
         .init();
@@ -48,7 +45,10 @@ fn no_hardware_mode() {
 
     configuration.display.frame_buffer = temp_fb.as_os_str().to_str().unwrap().to_owned();
     configuration.config_file = Some(temp_config.as_os_str().to_str().unwrap().to_owned());
-    configuration.api.upload_path = temp_dir.path().as_os_str().to_str().unwrap().to_owned();
+
+    if temp_uploads {
+        configuration.api.upload_path = temp_dir.path().as_os_str().to_str().unwrap().to_owned();
+    }
 
     Configuration::overwrite_file(&configuration).expect("Unable to save temporary config file");
 
