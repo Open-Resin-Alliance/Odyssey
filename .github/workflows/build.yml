@@ -24,8 +24,9 @@ jobs:
         run: |
           echo "ODYSSEY_RELEASE_VERSION=BRANCH_${{github.ref_name}}" >> "$GITHUB_ENV"
 
-      - name: install dependencies
-        run: sudo apt install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf g++-aarch64-linux-gnu gcc-aarch64-linux-gnu gcc g++
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf g++-aarch64-linux-gnu gcc-aarch64-linux-gnu gcc g++
 
       - name: Update Rust Toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
