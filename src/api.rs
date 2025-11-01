@@ -683,7 +683,7 @@ pub async fn start_api(
 
     let mut app = Route::new().nest("/", api_service);
 
-    if cfg!(debug_assertions) {
+    if full_config.api.enable_docs.is_some_and(|enable| enable) || cfg!(debug_assertions) {
         app = app.nest("/docs", ui);
     }
 

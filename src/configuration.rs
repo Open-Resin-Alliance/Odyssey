@@ -40,7 +40,7 @@ pub struct GcodeConfig {
     pub cure_start: String,
     pub cure_end: String,
     pub move_sync: String,
-    pub move_timeout: usize,
+    pub move_timeout: u64,
     pub status_check: String,
     pub status_desired: String,
 }
@@ -51,6 +51,18 @@ pub struct ApiConfig {
     pub upload_path: String,
     pub usb_glob: String,
     pub port: u16,
+    pub enable_docs: Option<bool>,
+}
+
+impl Default for ApiConfig {
+    fn default() -> ApiConfig {
+        ApiConfig {
+            upload_path: "uploads".to_string(),
+            usb_glob: "".to_string(),
+            port: 12357,
+            enable_docs: Some(false),
+        }
+    }
 }
 
 #[optional_struct(UpdateConfiguration)]

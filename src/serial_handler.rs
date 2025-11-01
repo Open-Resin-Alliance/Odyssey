@@ -9,54 +9,149 @@ use tokio_util::sync::CancellationToken;
 
 use crate::error::OdysseyError;
 
-#[async_trait]
-pub trait SerialHandler {
-    async fn send(&mut self, message: String) -> Result<(), OdysseyError>;
-    async fn receive(&mut self) -> Result<String, OdysseyError>;
-    async fn await_response(
-        &mut self,
-        response: &String,
-        timeout_duration: Duration,
-    ) -> Result<(), OdysseyError>;
-    async fn flush_input(&mut self) -> Result<(), OdysseyError>;
-    async fn run(&mut self, cancellation_token: CancellationToken) -> Result<(), OdysseyError>;
+#[derive(Debug)]
+pub struct InternalCommsHandler {
+    outgoing_sender: Sender<String>,
+    outgoing_receiver: Receiver<String>,
+    incoming_sender: Sender<String>,
+    incoming_receiver: Receiver<String>,
 }
 
-pub struct TTYPortHandler {
-    serial_port: TTYPort,
-    output_sender: Sender<String>,
-    output_receiver: Receiver<String>,
-    input_sender: Sender<String>,
-    input_receiver: Receiver<String>,
+impl Clone for InternalCommsHandler {
+    fn clone(&self) -> Self {
+        Self {
+            outgoing_sender: self.outgoing_sender.clone(),
+            outgoing_receiver: self.outgoing_receiver.resubscribe(),
+            incoming_sender: self.incoming_sender.clone(),
+            incoming_receiver: self.incoming_receiver.resubscribe(),
+        }
+    }
 }
 
-impl TTYPortHandler {
-    pub fn new(serial_port: TTYPort) -> TTYPortHandler {
-        let (output_sender, output_receiver) = broadcast::channel(200);
-        let (input_sender, input_receiver) = broadcast::channel(200);
-
-        TTYPortHandler {
-            serial_port,
-            output_sender,
-            output_receiver,
-            input_sender,
-            input_receiver,
+impl InternalCommsHandler {
+    pub fn new() -> Self {
+        let (outgoing_sender, outgoing_receiver) = broadcast::channel(200);
+        let (incoming_sender, incoming_receiver) = broadcast::channel(200);
+        Self {
+            outgoing_sender,
+            outgoing_receiver,
+            incoming_sender,
+            incoming_receiver,
+        }
+    }
+    pub fn invert(&self) -> Self {
+        Self {
+            outgoing_sender: self.incoming_sender.clone(),
+            outgoing_receiver: self.incoming_receiver.resubscribe(),
+            incoming_sender: self.outgoing_sender.clone(),
+            incoming_receiver: self.outgoing_receiver.resubscribe(),
         }
     }
 
-    async fn check_response(&mut self, expected: &String) -> Result<bool, OdysseyError> {
+    async fn flush_input(&mut self) -> Result<(), OdysseyError> {
+        while !self.incoming_receiver.is_empty() {
+            let _ = self.incoming_receiver.recv().await?;
+        }
+        Ok(())
+    }
+
+    async fn _await_response(&mut self, expected: &String) -> Result<(), OdysseyError> {
+        let mut interv = interval(Duration::from_millis(100));
+        while !self.check_response(expected).await? {
+            interv.tick().await;
+        }
+        Ok(())
+    }
+
+    pub async fn send(&self, message: String) -> Result<(), OdysseyError> {
+        self.outgoing_sender.send(message)?;
+        Ok(())
+    }
+    pub async fn receive(&mut self) -> Result<String, OdysseyError> {
+        self.incoming_receiver
+            .recv()
+            .await
+            .map_err(|err| err.into())
+    }
+
+    pub async fn try_receive(&mut self) -> Result<Option<String>, OdysseyError> {
+        match self.incoming_receiver.try_recv() {
+            Ok(message) => Ok(Some(message)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(e) => {
+                if let TryRecvError::Lagged(n) = e {
+                    tracing::error!(
+                        "Internal Communication channel fell too far behind! {} messages skipped!",
+                        n
+                    );
+                }
+                Err(e)?
+            }
+        }
+    }
+
+    pub async fn check_response(&mut self, expected: &String) -> Result<bool, OdysseyError> {
         self.receive()
             .await
             .map(|msg| msg.contains(expected))
             .map_err(|err| err.into())
     }
-
-    async fn await_response(&mut self, expected: &String) -> Result<(), OdysseyError> {
-        let mut interv = interval(Duration::from_millis(100));
-        while !self.check_response(expected).await? {
-            interv.tick();
+    pub async fn await_response(
+        &mut self,
+        response: &String,
+        timeout_duration: Duration,
+    ) -> Result<(), OdysseyError> {
+        match timeout(timeout_duration, self._await_response(response)).await {
+            Ok(res) => res.map(|_| ()),
+            Err(elapsed) => {
+                tracing::warn!("Timed out waiting for response over serialport");
+                Err(OdysseyError::hardware_error(Box::new(elapsed), 0))
+            }
         }
-        Ok(())
+    }
+
+    pub async fn send_and_check(
+        &mut self,
+        message: String,
+        expected: &String,
+    ) -> Result<bool, OdysseyError> {
+        self.flush_input().await?;
+        self.send(message).await?;
+        self.check_response(expected).await
+    }
+
+    pub async fn send_and_await(
+        &mut self,
+        message: String,
+        expected: &String,
+        timeout_duration: Duration,
+    ) -> Result<(), OdysseyError> {
+        self.flush_input().await?;
+        self.send(message).await?;
+        self.await_response(expected, timeout_duration).await
+    }
+}
+
+#[async_trait]
+pub trait SerialHandler {
+    async fn run(
+        mut self: Box<Self>,
+        cancellation_token: CancellationToken,
+    ) -> Result<(), OdysseyError>;
+    fn get_internal_comms(&self) -> InternalCommsHandler;
+}
+
+pub struct TTYPortHandler {
+    serial_port: TTYPort,
+    internal_comms: InternalCommsHandler,
+}
+
+impl TTYPortHandler {
+    pub fn new(serial_port: TTYPort) -> TTYPortHandler {
+        TTYPortHandler {
+            serial_port,
+            internal_comms: InternalCommsHandler::new(),
+        }
     }
 
     async fn _send_serial(&mut self, message: &String) -> Result<usize, OdysseyError> {
@@ -80,34 +175,14 @@ impl TTYPortHandler {
 
 #[async_trait]
 impl SerialHandler for TTYPortHandler {
-    async fn send(&mut self, message: String) -> Result<(), OdysseyError> {
-        self.output_sender.send(message)?;
-        Ok(())
-    }
-    async fn receive(&mut self) -> Result<String, OdysseyError> {
-        self.input_receiver.recv().await.map_err(|err| err.into())
-    }
-    async fn await_response(
-        &mut self,
-        response: &String,
-        timeout_duration: Duration,
-    ) -> Result<(), OdysseyError> {
-        match timeout(timeout_duration, self.await_response(response)).await {
-            Ok(res) => res.map(|_| ()),
-            Err(elapsed) => {
-                tracing::warn!("Timed out waiting for response over serialport");
-                Err(OdysseyError::hardware_error(Box::new(elapsed), 0))
-            }
-        }
-    }
-    async fn flush_input(&mut self) -> Result<(), OdysseyError> {
-        while !self.input_receiver.is_empty() {
-            let _ = self.input_receiver.recv().await?;
-        }
-        Ok(())
+    fn get_internal_comms(&self) -> InternalCommsHandler {
+        self.internal_comms.clone()
     }
 
-    async fn run(&mut self, cancellation_token: CancellationToken) -> Result<(), OdysseyError> {
+    async fn run(
+        mut self: Box<Self>,
+        cancellation_token: CancellationToken,
+    ) -> Result<(), OdysseyError> {
         let mut buf_reader = BufReader::new(
             self.serial_port
                 .try_clone_native()
@@ -117,7 +192,7 @@ impl SerialHandler for TTYPortHandler {
         let mut interval = interval(Duration::from_millis(100));
 
         loop {
-            interval.tick();
+            interval.tick().await;
 
             let mut read_string = String::new();
             match buf_reader.read_line(&mut read_string) {
@@ -131,23 +206,14 @@ impl SerialHandler for TTYPortHandler {
                 Ok(n) => {
                     if n > 0 {
                         tracing::debug!("Read {} bytes from serial: {}", n, read_string.trim_end());
-                        self.input_sender.send(read_string)?;
+                        self.internal_comms.send(read_string).await?;
                     }
                 }
             };
 
-            match self.output_receiver.try_recv() {
-                Err(e) => match e {
-                    TryRecvError::Closed => {
-                        tracing::error!("Unable to receive data to write to serial, inter-thread channel closed");
-                        Err(e)?
-                    }
-                    _ => continue,
-                },
-                Ok(message) => {
-                    tracing::debug!("Writing to serial message={}", message);
-                    self._send_serial(&message).await?;
-                }
+            if let Some(message) = self.internal_comms.try_receive().await? {
+                tracing::debug!("Writing to serial message={}", message);
+                self._send_serial(&message).await?;
             }
 
             if cancellation_token.is_cancelled() {

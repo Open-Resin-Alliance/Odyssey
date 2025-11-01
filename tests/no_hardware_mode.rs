@@ -1,6 +1,6 @@
 use std::{fs, sync::Arc, time::Duration};
 
-use crate::common::test_resource_path;
+use crate::common::{mock_serial_handler::MockSerialHandler, test_resource_path};
 use odyssey::{
     api,
     api_objects::PrinterState,
@@ -43,9 +43,6 @@ fn no_hardware_mode() {
 
     tracing::info!("Write frames to {}", temp_fb.display());
 
-    let (serial_read_sender, serial_read_receiver) = broadcast::channel(200);
-    let (serial_write_sender, serial_write_receiver) = broadcast::channel(200);
-
     let mut configuration = Configuration::from_file(test_resource_path("default.yaml".to_owned()))
         .expect("Config could not be parsed");
 
@@ -57,55 +54,10 @@ fn no_hardware_mode() {
 
     let config = Arc::new(configuration);
 
-    let gcode = Gcode::new(&config.gcode, serial_read_receiver, serial_write_sender);
+    let mut serial_handler = MockSerialHandler::new(config.gcode.move_sync.clone());
+    serial_handler.add_response(config.gcode.status_check.trim().to_string(), config.gcode.status_desired.trim().to_string());
 
-    let display: PrintDisplay = PrintDisplay::new(&config.display);
-
-    let operation_channel = mpsc::channel::<Operation>(100);
-    let status_channel = broadcast::channel::<PrinterState>(100);
-
-    let runtime = build_runtime();
-
-    let sender = operation_channel.0.clone();
-    let receiver = status_channel.1.resubscribe();
-
-    let serial_handle = runtime.spawn(serial_feedback_loop(
-        serial_read_sender,
-        serial_write_receiver,
-        shutdown_handler.cancellation_token.clone(),
-        config.gcode.status_check.clone(),
-        config.gcode.status_desired.clone(),
-        config.gcode.move_sync.clone(),
-    ));
-
-    let statemachine_handle = runtime.spawn(Printer::start_printer(
-        config.clone(),
-        display,
-        gcode,
-        operation_channel.1,
-        status_channel.0.clone(),
-        shutdown_handler.cancellation_token.clone(),
-    ));
-
-    let api_handle = runtime.spawn(api::start_api(
-        config.clone(),
-        sender,
-        receiver,
-        shutdown_handler.cancellation_token.clone(),
-    ));
-
-    runtime.block_on(async {
-        shutdown_handler.until_shutdown().await;
-
-        let _ = serial_handle.await;
-        let _ = statemachine_handle.await;
-        let _ = api_handle.await;
-
-        temp_dir.close().expect("Unable to remove tempdir");
-        tracing::info!("Shutting down");
-    });
-
-    runtime.shutdown_background();
+    odyssey::start_odyssey(build_runtime(), config, Box::new(serial_handler));
 }
 
 pub async fn serial_feedback_loop(
