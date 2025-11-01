@@ -2,10 +2,9 @@ use std::{
     ffi::OsStr,
     fs::File,
     io::{Error, ErrorKind, Read, Write},
-    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::Arc,
-    time::{Duration, UNIX_EPOCH},
+    time::Duration,
 };
 
 use futures::{stream::BoxStream, StreamExt};
@@ -14,8 +13,8 @@ use itertools::Itertools;
 use optional_struct::Applicable;
 use poem::{
     error::{
-        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotImplemented,
-        ServiceUnavailable, Unauthorized,
+        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotFound,
+        NotImplemented, ServiceUnavailable, Unauthorized,
     },
     listener::TcpListener,
     middleware::Cors,
@@ -42,7 +41,7 @@ use tracing::instrument;
 use crate::{
     api_objects::{
         DisplayTest, FileMetadata, LocationCategory, PhysicalState, PrintMetadata, PrinterState,
-        PrinterStatus, ReleaseVersion, ThumbnailSize,
+        PrinterStatus, ReleaseVersion, ThumbnailSize, UpdatePrintUserMetadata,
     },
     configuration::{ApiConfig, Configuration, UpdateConfiguration},
     printer::Operation,
@@ -71,6 +70,7 @@ struct Api;
 
 #[OpenApi]
 impl Api {
+    #[instrument(ret)]
     #[oai(path = "/print/start", method = "post")]
     async fn start_print(
         &self,
@@ -81,9 +81,7 @@ impl Api {
     ) -> Result<()> {
         let location = location.unwrap_or(LocationCategory::Local);
 
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
-
-        let file_data = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
+        let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
 
         operation_sender
             .send(Operation::StartPrint { file_data })
@@ -91,7 +89,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/print/pause", method = "post")]
     async fn pause_print(
         &self,
@@ -103,7 +101,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/print/resume", method = "post")]
     async fn resume_print(
         &self,
@@ -115,7 +113,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/print/cancel", method = "post")]
     async fn cancel_print(
         &self,
@@ -127,7 +125,7 @@ impl Api {
             .map_err(ServiceUnavailable)
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/shutdown", method = "post")]
     async fn shutdown(&self, Data(operation_sender): Data<&mpsc::Sender<Operation>>) -> Result<()> {
         operation_sender
@@ -135,7 +133,7 @@ impl Api {
             .await
             .map_err(ServiceUnavailable)
     }
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/status", method = "get")]
     async fn get_status(
         &self,
@@ -168,7 +166,7 @@ impl Api {
             .boxed()
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/config", method = "get")]
     async fn get_config(
         &self,
@@ -177,7 +175,7 @@ impl Api {
         Json(full_config.as_ref().clone())
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/config", method = "patch")]
     async fn patch_config(
         &self,
@@ -190,7 +188,7 @@ impl Api {
         Ok(Json(ammend_config))
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/update/releases", method = "get")]
     async fn get_releases(&self) -> Result<Json<Vec<ReleaseVersion>>> {
         let releases_result = spawn_blocking(updates::get_releases)
@@ -210,7 +208,7 @@ impl Api {
         ))
     }
 
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/update", method = "post")]
     async fn update(&self, Query(release): Query<String>) -> Result<()> {
         Ok(spawn_blocking(|| updates::update(release))
@@ -218,16 +216,16 @@ impl Api {
             .map_err(InternalServerError)??)
     }
 
-    #[instrument(skip(z, cure))]
+    #[instrument(ret)]
     #[oai(path = "/manual", method = "post")]
     async fn manual_control(
         &self,
-        z: Query<Option<f64>>,
-        cure: Query<Option<bool>>,
+        Query(z): Query<Option<f64>>,
+        Query(cure): Query<Option<bool>>,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
         Data(_state_ref): Data<&Arc<RwLock<PrinterState>>>,
     ) -> Result<()> {
-        if let Query(Some(z)) = z {
+        if let Some(z) = z {
             operation_sender
                 .send(Operation::ManualMove {
                     z: (z * 1000.0).trunc() as u32,
@@ -236,7 +234,7 @@ impl Api {
                 .map_err(ServiceUnavailable)?;
         }
 
-        if let Query(Some(cure)) = cure {
+        if let Some(cure) = cure {
             operation_sender
                 .send(Operation::ManualCure { cure })
                 .await
@@ -245,7 +243,7 @@ impl Api {
 
         Ok(())
     }
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/manual/home", method = "post")]
     async fn manual_home(
         &self,
@@ -259,7 +257,7 @@ impl Api {
 
         Ok(())
     }
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/manual/hardware_command", method = "post")]
     async fn manual_command(
         &self,
@@ -274,7 +272,7 @@ impl Api {
 
         Ok(())
     }
-    #[instrument]
+    #[instrument(ret)]
     #[oai(path = "/manual/display_test", method = "post")]
     async fn manual_display_test(
         &self,
@@ -287,7 +285,7 @@ impl Api {
             .map_err(ServiceUnavailable)?;
         Ok(())
     }
-    #[instrument]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/manual/display_layer", method = "post")]
     async fn manual_display_layer(
         &self,
@@ -299,16 +297,14 @@ impl Api {
     ) -> Result<()> {
         let location = location.unwrap_or(LocationCategory::Local);
 
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
-
-        let file_data = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
+        let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
 
         operation_sender
             .send(Operation::ManualDisplayLayer { file_data, layer })
             .await
             .map_err(ServiceUnavailable)
     }
-    #[instrument]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/files", method = "post")]
     async fn upload_file(
         &self,
@@ -331,7 +327,7 @@ impl Api {
 
         Ok(())
     }
-    #[instrument]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/files", method = "get")]
     async fn get_files(
         &self,
@@ -344,14 +340,6 @@ impl Api {
         let location = location.unwrap_or(LocationCategory::Local);
         let page_index = page_index.unwrap_or(DEFAULT_PAGE_INDEX);
         let page_size = page_size.unwrap_or(DEFAULT_PAGE_SIZE);
-
-        tracing::info!(
-            "Getting files in location={:?}, subdirectory={:?}, page_index={:?}, page_size={:?}",
-            location,
-            subdirectory,
-            page_index,
-            page_size
-        );
 
         match location {
             LocationCategory::Local => {
@@ -383,7 +371,12 @@ impl Api {
         let files_vec = read_dir
             .map_err(InternalServerError)?
             .flatten()
-            .map(|f| f.path())
+            .filter_map(|f| {
+                f.path()
+                    .strip_prefix(upload_path)
+                    .map(|path_ref| path_ref.to_owned())
+                    .ok()
+            })
             // TODO add sorting here
             .filter(|f| f.is_dir() || f.extension().and_then(OsStr::to_str).eq(&Some("sl1")));
 
@@ -398,11 +391,13 @@ impl Api {
         let dirs = paths
             .iter()
             .filter(|f| f.is_dir())
+            .filter_map(|f| f.as_os_str().to_str())
             .flat_map(|f| Api::_get_filedata(f, LocationCategory::Local, configuration).ok())
             .collect_vec();
         let files = paths
             .iter()
             .filter(|f| !f.is_dir())
+            .filter_map(|f| f.as_os_str().to_str())
             .flat_map(|f| Api::_get_print_metadata(f, LocationCategory::Local, configuration).ok())
             .collect_vec();
 
@@ -474,57 +469,27 @@ impl Api {
     }
 
     fn _get_filedata(
-        target_file: &PathBuf,
+        file_path: &str,
         location: LocationCategory,
         configuration: &ApiConfig,
     ) -> Result<FileMetadata> {
         tracing::info!("Getting file data");
-        let modified_time = target_file
-            .metadata()
-            .ok()
-            .and_then(|meta| meta.modified().ok())
-            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
-            .map(|dur| dur.as_secs());
-
-        let file_size = target_file.metadata().ok().map(|meta| meta.size());
 
         // TODO handle USB _get_filedata
-        Ok(FileMetadata {
-            path: target_file
-                .strip_prefix(configuration.upload_path.as_str())
-                .map_err(InternalServerError)?
-                .to_str()
-                .map(|path_str| path_str.to_string())
-                .ok_or(InternalServerError(Error::new(
-                    ErrorKind::NotFound,
-                    "unable to parse file path",
-                )))?,
-            name: target_file
-                .file_name()
-                .and_then(|path_str| path_str.to_str())
-                .map(|path_str| path_str.to_string())
-                .ok_or(InternalServerError(Error::new(
-                    ErrorKind::NotFound,
-                    "Unable to parse file name",
-                )))?,
-            last_modified: modified_time,
-            file_size,
-            location_category: location,
-            parent_path: configuration.upload_path.clone(),
-        })
+        FileMetadata::from_path(file_path, &configuration.upload_path, location).map_err(NotFound)
     }
 
     fn _get_print_metadata(
-        target_file: &PathBuf,
+        file_path: &str,
         location: LocationCategory,
         configuration: &ApiConfig,
     ) -> Result<PrintMetadata> {
-        let file_data = Api::_get_filedata(target_file, location, configuration)?;
+        let file_data = Api::_get_filedata(file_path, location, configuration)?;
         tracing::info!("Extracting print metadata");
 
-        Ok(Sl1::from_file(file_data).get_metadata())
+        Ok(Sl1::from_file(file_data).map_err(NotFound)?.get_metadata())
     }
-    #[instrument]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/file", method = "get")]
     async fn get_file(
         &self,
@@ -555,7 +520,7 @@ impl Api {
 
         Ok(Attachment::new(data).filename(file_name))
     }
-    #[instrument]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/file/metadata", method = "get")]
     async fn get_file_metadata(
         &self,
@@ -565,21 +530,42 @@ impl Api {
     ) -> Result<Json<PrintMetadata>> {
         let location = location.unwrap_or(LocationCategory::Local);
 
-        tracing::info!(
-            "Getting file metadata from {:?} in {:?}",
-            file_path,
-            location
-        );
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
-
         Ok(Json(Api::_get_print_metadata(
-            &full_file_path,
+            &file_path,
             location,
             &configuration.api,
         )?))
     }
 
-    #[instrument]
+    #[instrument(ret, skip(configuration))]
+    #[oai(path = "/file/metadata", method = "patch")]
+    async fn patch_file_metadata(
+        &self,
+        Query(file_path): Query<String>,
+        Query(location): Query<Option<LocationCategory>>,
+        Json(patch_metadata): Json<UpdatePrintUserMetadata>,
+        Data(configuration): Data<&Arc<Configuration>>,
+    ) -> Result<Json<PrintMetadata>> {
+        let location = location.unwrap_or(LocationCategory::Local);
+
+        tracing::info!(
+            "Getting file metadata from {:?} in {:?}",
+            file_path,
+            location
+        );
+
+        let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
+        tracing::info!("Extracting print metadata");
+
+        Sl1::set_user_metadata(&file_data.open_file().map_err(NotFound)?, patch_metadata)
+            .map_err(InternalServerError)?;
+
+        Ok(Json(
+            Sl1::from_file(file_data).map_err(NotFound)?.get_metadata(),
+        ))
+    }
+
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/file/thumbnail", method = "get")]
     async fn get_thumbnail(
         &self,
@@ -592,19 +578,19 @@ impl Api {
         let size = size.unwrap_or(ThumbnailSize::Small);
 
         tracing::info!("Getting thumbnail from {:?} in {:?}", file_path, location);
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
 
-        let file_metadata = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
+        let file_metadata = Api::_get_filedata(&file_path, location, &configuration.api)?;
         tracing::info!("Extracting print thumbnail");
 
         let file_data = Sl1::from_file(file_metadata)
+            .map_err(NotFound)?
             .get_thumbnail(size)
             .map_err(InternalServerError)?;
 
         Ok(Attachment::new(file_data.data).filename(file_data.name))
     }
 
-    #[instrument]
+    #[instrument(ret, skip(configuration))]
     #[oai(path = "/file", method = "delete")]
     async fn delete_file(
         &self,
@@ -615,9 +601,8 @@ impl Api {
         let location = location.unwrap_or(LocationCategory::Local);
         tracing::info!("Deleting file {:?} in {:?}", file_path, location);
 
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
-
-        let metadata = Api::_get_filedata(&full_file_path, location, &configuration.api)?;
+        let metadata = Api::_get_filedata(&file_path, location, &configuration.api)?;
+        let full_file_path = metadata.get_full_path();
 
         if full_file_path.is_dir() {
             fs::remove_dir_all(full_file_path)
@@ -657,6 +642,7 @@ pub async fn start_api(
     operation_sender: mpsc::Sender<Operation>,
     state_receiver: broadcast::Receiver<PrinterState>,
     cancellation_token: CancellationToken,
+    apidocs: bool,
 ) {
     let state_ref = Arc::new(RwLock::new(PrinterState {
         print_data: None,
@@ -683,7 +669,7 @@ pub async fn start_api(
 
     let mut app = Route::new().nest("/", api_service);
 
-    if cfg!(debug_assertions) {
+    if apidocs || cfg!(debug_assertions) {
         app = app.nest("/docs", ui);
     }
 
