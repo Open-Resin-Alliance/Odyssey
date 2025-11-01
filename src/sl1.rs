@@ -1,7 +1,6 @@
 use std::{
     fs::File,
-    io::{Error, Read},
-    path::Path,
+    io::{self, Error, Read},
 };
 
 use async_trait::async_trait;
@@ -77,24 +76,24 @@ pub struct Sl1 {
 #[async_trait]
 impl PrintFile for Sl1 {
     /// Instantiate the Sl1 from the given file
-    fn from_file(file_data: FileMetadata) -> Sl1 {
+    fn from_file(file_data: FileMetadata) -> Result<Sl1, io::Error> {
         tracing::info!("Loading PrintFile from SL1 {:?}", file_data);
 
-        let full_path = Path::new(file_data.parent_path.as_str()).join(file_data.path.as_str());
+        let file = File::open(file_data.get_full_path())?;
 
-        let file = File::open(full_path).unwrap();
+        let user_metadata = Sl1::get_user_metadata(&file);
 
-        let mut archive = ZipArchive::new(file).unwrap();
+        let mut archive = ZipArchive::new(file)?;
 
         let mut config_contents = String::new();
 
         archive
             .by_name(CONFIG_FILE)
             .unwrap()
-            .read_to_string(&mut config_contents)
-            .expect("Unable to read print config.ini");
+            .read_to_string(&mut config_contents)?;
 
-        let config = PrintConfig::from_string(config_contents).unwrap();
+        let config = PrintConfig::from_string(config_contents)
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
 
         let frame_list: Vec<String> = archive
             .file_names()
@@ -110,14 +109,15 @@ impl PrintFile for Sl1 {
             layer_height: config.layer_height,
             layer_height_microns: ((config.layer_height * 1000.0).trunc() as u32),
             layer_count: frame_list.len(),
+            user_metadata,
         };
 
-        Sl1 {
+        Ok(Sl1 {
             frame_list,
             archive,
             config,
             metadata,
-        }
+        })
     }
 
     async fn get_layer_data(&mut self, index: usize) -> Option<Layer> {

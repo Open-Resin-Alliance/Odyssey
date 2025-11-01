@@ -16,6 +16,8 @@ struct Args {
     config: String,
     #[arg(default_value_t=String::from("DEBUG"), short, long)]
     loglevel: String,
+    #[arg(default_value_t = false, short, long)]
+    apidocs: bool,
 }
 
 fn main() {
