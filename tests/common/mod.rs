@@ -1,5 +1,7 @@
 use odyssey::configuration::{ApiConfig, Configuration, DisplayConfig, GcodeConfig, PrinterConfig};
 
+pub mod mock_serial_handler;
+
 #[allow(unused_variables)]
 pub static TEST_RESOURCE_DIR: &str = "tests/resources";
 pub static RESOURCE_DIR: &str = "resources";
@@ -40,6 +42,7 @@ pub fn default_test_configuration() -> Configuration {
             upload_path: upload_path(),
             usb_glob: upload_path(),
             port: 12357,
+            enable_docs: Some(true),
         },
         display: DisplayConfig {
             frame_buffer: "/dev/null".to_owned(),

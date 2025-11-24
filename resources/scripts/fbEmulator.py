@@ -35,44 +35,47 @@ print(pygame.display.Info())
 
 frame_size=int((sliced_x*sliced_y)*(bytes_per_pixelgroup/len(real_bit_depth)))
 
-with open(fifo_path, mode='rb', buffering=frame_size) as efb:
+with open(fifo_path, mode='rb') as efb:
     efb.read()
     while True:
         if efb.readable():
-            data = efb.read()
-            if len(data)>0:
-                print(f"Reading {len(data)} bytes from {fifo_path}")
+            data = b""
 
-                # convert into array of 8bit values
-                final_data=[]
+            while len(data)<frame_size:
+                data+=efb.read()
 
-                grouped_data = [data[i:(i+bytes_per_pixelgroup)] for i in range(0, len(data), bytes_per_pixelgroup)]
+            print(f"Reading {len(data)} bytes from {fifo_path}")
 
-                for group in grouped_data:
-                    combined = int.from_bytes(group, byteorder="little")
-                    #if (combined>0): print(f"{combined:>016b}")
+            # convert into array of 8bit values
+            final_data=[]
 
-                    pos_shift = sum(real_bit_depth)
+            grouped_data = [data[i:(i+bytes_per_pixelgroup)] for i in range(0, len(data), bytes_per_pixelgroup)]
 
-                    for i in range(len(real_bit_depth)):
-                        pos_shift -=real_bit_depth[i]
+            for group in grouped_data:
+                combined = int.from_bytes(group, byteorder="little")
+                #if (combined>0): print(f"{combined:>016b}")
 
-                        mask = ((1 << real_bit_depth[i]) -1) << pos_shift
-                        single_pixel = (combined & mask) >> pos_shift
+                pos_shift = sum(real_bit_depth)
 
-                        single_pixel = single_pixel << (fake_bit_depth-real_bit_depth[i])
+                for i in range(len(real_bit_depth)):
+                    pos_shift -=real_bit_depth[i]
 
-                        final_data.append( single_pixel )
+                    mask = ((1 << real_bit_depth[i]) -1) << pos_shift
+                    single_pixel = (combined & mask) >> pos_shift
 
-                for i in range(0, len(final_data)):
-                    zoomed_x = (i*zoom_ratio)%(sliced_x*zoom_ratio)
-                    zoomed_y = int((i)/(sliced_x))*zoom_ratio
+                    single_pixel = single_pixel << (fake_bit_depth-real_bit_depth[i])
+
+                    final_data.append( single_pixel )
+
+            for i in range(0, len(final_data)):
+                zoomed_x = (i*zoom_ratio)%(sliced_x*zoom_ratio)
+                zoomed_y = int((i)/(sliced_x))*zoom_ratio
 
 
-                    for j in range(zoom_ratio):
-                        for k in range(zoom_ratio):
-                            pixelArray[zoomed_x+j, zoomed_y+k]=pygame.Color(final_data[i],final_data[i],final_data[i])
+                for j in range(zoom_ratio):
+                    for k in range(zoom_ratio):
+                        pixelArray[zoomed_x+j, zoomed_y+k]=pygame.Color(final_data[i],final_data[i],final_data[i])
 
-                    #if final_data[i]>0: print(f"{zoomed_x}, {zoomed_y}, {zoom_ratio}, {final_data[i]:>08b}")
+                #if final_data[i]>0: print(f"{zoomed_x}, {zoomed_y}, {zoom_ratio}, {final_data[i]:>08b}")
 
-                pygame.display.flip()
+            pygame.display.flip()

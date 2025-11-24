@@ -14,6 +14,7 @@ use crate::api_objects::PrinterState;
 use crate::api_objects::PrinterStatus;
 use crate::configuration::*;
 use crate::display::*;
+use crate::error::OdysseyError;
 use crate::printfile::Layer;
 use crate::printfile::PrintFile;
 use crate::sl1::*;
@@ -423,17 +424,19 @@ impl<T: HardwareControl> Printer<'_, T> {
     pub async fn boot(&mut self) {
         tracing::info!("Booting up printer.");
 
-        let boot_result: Result<PhysicalState, std::io::Error> =
-            self.hardware_controller.boot().await;
-        if let Ok(physical_state) = boot_result {
-            self.update_idle_state(physical_state).await;
-        } else {
-            self.shutdown().await;
+        match self.hardware_controller.boot().await {
+            Ok(physical_state) => {
+                self.update_idle_state(physical_state).await;
+            }
+            Err(e) => {
+                tracing::error!("Error booting printer:{}", e);
+                self.shutdown().await;
+            }
         }
     }
 
     pub async fn _verify_hardware(&mut self) -> bool {
-        if !self.hardware_controller.is_ready().await {
+        if let Ok(false) = self.hardware_controller.is_ready().await {
             tracing::error!("Hardware controller no longer ready! Shutting down Odyssey");
             self.shutdown().await;
             return false;
@@ -444,7 +447,7 @@ impl<T: HardwareControl> Printer<'_, T> {
     pub async fn shutdown(&mut self) {
         tracing::info!("Shutting down.");
         // If hardware still running, execute shutdown commands
-        if self.hardware_controller.is_ready().await {
+        if let Ok(true) = self.hardware_controller.is_ready().await {
             if (self.hardware_controller.shutdown().await).is_ok() {
                 tracing::info!("Shut down gcode executed successfully")
             } else {
@@ -509,10 +512,13 @@ impl<T: HardwareControl> Printer<'_, T> {
         self.shutdown_operation_handler().await;
 
         if let PrinterStatus::Shutdown = self.state.status {
-            if self.hardware_controller.is_ready().await {
-                self.boot().await;
-            } else {
-                shutdown_interv.tick().await;
+            match self.hardware_controller.is_ready().await {
+                Ok(true) => {
+                    self.boot().await;
+                }
+                _ => {
+                    shutdown_interv.tick().await;
+                }
             }
         }
     }
@@ -629,19 +635,19 @@ pub enum Operation {
 
 #[async_trait]
 pub trait HardwareControl {
-    async fn is_ready(&mut self) -> bool;
+    async fn is_ready(&mut self) -> Result<bool, OdysseyError>;
     async fn initialize(&mut self);
-    async fn home(&mut self) -> std::io::Result<PhysicalState>;
-    async fn manual_command(&mut self, command: String) -> std::io::Result<PhysicalState>;
-    async fn start_print(&mut self) -> std::io::Result<PhysicalState>;
-    async fn end_print(&mut self) -> std::io::Result<PhysicalState>;
-    async fn move_z(&mut self, z: u32, speed: f64) -> std::io::Result<PhysicalState>;
-    async fn start_layer(&mut self, layer: usize) -> std::io::Result<PhysicalState>;
-    async fn start_curing(&mut self) -> std::io::Result<PhysicalState>;
-    async fn stop_curing(&mut self) -> std::io::Result<PhysicalState>;
-    async fn boot(&mut self) -> std::io::Result<PhysicalState>;
-    async fn shutdown(&mut self) -> std::io::Result<()>;
-    fn get_physical_state(&self) -> std::io::Result<PhysicalState>;
+    async fn home(&mut self) -> Result<PhysicalState, OdysseyError>;
+    async fn manual_command(&mut self, command: String) -> Result<PhysicalState, OdysseyError>;
+    async fn start_print(&mut self) -> Result<PhysicalState, OdysseyError>;
+    async fn end_print(&mut self) -> Result<PhysicalState, OdysseyError>;
+    async fn move_z(&mut self, z: u32, speed: f64) -> Result<PhysicalState, OdysseyError>;
+    async fn start_layer(&mut self, layer: usize) -> Result<PhysicalState, OdysseyError>;
+    async fn start_curing(&mut self) -> Result<PhysicalState, OdysseyError>;
+    async fn stop_curing(&mut self) -> Result<PhysicalState, OdysseyError>;
+    async fn boot(&mut self) -> Result<PhysicalState, OdysseyError>;
+    async fn shutdown(&mut self) -> Result<(), OdysseyError>;
+    fn get_physical_state(&self) -> Result<PhysicalState, OdysseyError>;
     fn add_print_variable(&mut self, variable: String, value: String);
     fn remove_print_variable(&mut self, variable: String);
     fn clear_variables(&mut self);
