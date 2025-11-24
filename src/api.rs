@@ -14,12 +14,12 @@ use optional_struct::Applicable;
 use poem::{
     error::{
         BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotFound,
-        NotImplemented, ServiceUnavailable, Unauthorized,
+        NotImplemented, Unauthorized,
     },
     listener::TcpListener,
     middleware::Cors,
     web::{sse::Event, Data},
-    EndpointExt, Response, Result, Route, Server,
+    EndpointExt, Result, Route, Server,
 };
 use poem_openapi::{
     param::Query,
@@ -44,6 +44,7 @@ use crate::{
         PrinterStatus, ReleaseVersion, ThumbnailSize, UpdatePrintUserMetadata,
     },
     configuration::{ApiConfig, Configuration, UpdateConfiguration},
+    error::OdysseyError,
     printer::Operation,
     printfile::PrintFile,
     sl1::Sl1,
@@ -83,10 +84,13 @@ impl Api {
 
         let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
 
-        operation_sender
-            .send(Operation::StartPrint { file_data })
-            .await
-            .map_err(ServiceUnavailable)
+        Ok(
+            Self::send_statemachine_operation(
+                operation_sender,
+                Operation::StartPrint { file_data },
+            )
+            .await?,
+        )
     }
 
     #[instrument(ret)]
@@ -95,10 +99,7 @@ impl Api {
         &self,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
     ) -> Result<()> {
-        operation_sender
-            .send(Operation::PausePrint {})
-            .await
-            .map_err(ServiceUnavailable)
+        Ok(Self::send_statemachine_operation(operation_sender, Operation::PausePrint {}).await?)
     }
 
     #[instrument(ret)]
@@ -107,10 +108,7 @@ impl Api {
         &self,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
     ) -> Result<()> {
-        operation_sender
-            .send(Operation::ResumePrint {})
-            .await
-            .map_err(ServiceUnavailable)
+        Ok(Self::send_statemachine_operation(operation_sender, Operation::ResumePrint {}).await?)
     }
 
     #[instrument(ret)]
@@ -119,20 +117,25 @@ impl Api {
         &self,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
     ) -> Result<()> {
-        operation_sender
-            .send(Operation::StopPrint {})
-            .await
-            .map_err(ServiceUnavailable)
+        Ok(Self::send_statemachine_operation(operation_sender, Operation::StopPrint {}).await?)
     }
 
     #[instrument(ret)]
     #[oai(path = "/shutdown", method = "post")]
     async fn shutdown(&self, Data(operation_sender): Data<&mpsc::Sender<Operation>>) -> Result<()> {
-        operation_sender
-            .send(Operation::Shutdown {})
-            .await
-            .map_err(ServiceUnavailable)
+        Ok(Self::send_statemachine_operation(operation_sender, Operation::Shutdown {}).await?)
     }
+
+    async fn send_statemachine_operation(
+        operation_sender: &mpsc::Sender<Operation>,
+        operation: Operation,
+    ) -> Result<(), OdysseyError> {
+        operation_sender
+            .send(operation)
+            .await
+            .map_err(OdysseyError::from)
+    }
+
     #[instrument(ret)]
     #[oai(path = "/status", method = "get")]
     async fn get_status(
@@ -193,7 +196,7 @@ impl Api {
     async fn get_releases(&self) -> Result<Json<Vec<ReleaseVersion>>> {
         let releases_result = spawn_blocking(updates::get_releases)
             .await
-            .map_err(InternalServerError)?;
+            .map_err(OdysseyError::from)?;
 
         Ok(Json(
             releases_result?
@@ -213,7 +216,7 @@ impl Api {
     async fn update(&self, Query(release): Query<String>) -> Result<()> {
         Ok(spawn_blocking(|| updates::update(release))
             .await
-            .map_err(InternalServerError)??)
+            .map_err(OdysseyError::from)??)
     }
 
     #[instrument(ret)]
@@ -226,19 +229,18 @@ impl Api {
         Data(_state_ref): Data<&Arc<RwLock<PrinterState>>>,
     ) -> Result<()> {
         if let Some(z) = z {
-            operation_sender
-                .send(Operation::ManualMove {
+            Self::send_statemachine_operation(
+                operation_sender,
+                Operation::ManualMove {
                     z: (z * 1000.0).trunc() as u32,
-                })
-                .await
-                .map_err(ServiceUnavailable)?;
+                },
+            )
+            .await?;
         }
 
         if let Some(cure) = cure {
-            operation_sender
-                .send(Operation::ManualCure { cure })
-                .await
-                .map_err(ServiceUnavailable)?;
+            Self::send_statemachine_operation(operation_sender, Operation::ManualCure { cure })
+                .await?;
         }
 
         Ok(())
@@ -250,12 +252,7 @@ impl Api {
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
         Data(_state_ref): Data<&Arc<RwLock<PrinterState>>>,
     ) -> Result<()> {
-        operation_sender
-            .send(Operation::ManualHome)
-            .await
-            .map_err(ServiceUnavailable)?;
-
-        Ok(())
+        Ok(Self::send_statemachine_operation(operation_sender, Operation::ManualHome).await?)
     }
     #[instrument(ret)]
     #[oai(path = "/manual/hardware_command", method = "post")]
@@ -265,12 +262,11 @@ impl Api {
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
         Data(_state_ref): Data<&Arc<RwLock<PrinterState>>>,
     ) -> Result<()> {
-        operation_sender
-            .send(Operation::ManualCommand { command })
-            .await
-            .map_err(ServiceUnavailable)?;
-
-        Ok(())
+        Ok(Self::send_statemachine_operation(
+            operation_sender,
+            Operation::ManualCommand { command },
+        )
+        .await?)
     }
     #[instrument(ret)]
     #[oai(path = "/manual/display_test", method = "post")]
@@ -279,11 +275,11 @@ impl Api {
         Query(test): Query<DisplayTest>,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
     ) -> Result<()> {
-        operation_sender
-            .send(Operation::ManualDisplayTest { test })
-            .await
-            .map_err(ServiceUnavailable)?;
-        Ok(())
+        Ok(Self::send_statemachine_operation(
+            operation_sender,
+            Operation::ManualDisplayTest { test },
+        )
+        .await?)
     }
     #[instrument(ret, skip(configuration))]
     #[oai(path = "/manual/display_layer", method = "post")]
@@ -299,10 +295,11 @@ impl Api {
 
         let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
 
-        operation_sender
-            .send(Operation::ManualDisplayLayer { file_data, layer })
-            .await
-            .map_err(ServiceUnavailable)
+        Ok(Self::send_statemachine_operation(
+            operation_sender,
+            Operation::ManualDisplayLayer { file_data, layer },
+        )
+        .await?)
     }
     #[instrument(ret, skip(configuration))]
     #[oai(path = "/files", method = "post")]
@@ -677,12 +674,6 @@ pub async fn start_api(
         .data(Arc::new(state_receiver))
         .data(state_ref.clone())
         .data(full_config)
-        .catch_all_error(|err| async move {
-            log::error!("{}", err);
-            Response::builder()
-                .status(err.status())
-                .body(err.to_string())
-        })
         .with(Cors::new());
 
     match Server::new(TcpListener::bind(addr))

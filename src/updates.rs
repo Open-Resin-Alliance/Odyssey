@@ -1,8 +1,8 @@
-use std::error::Error;
-
 use self_update::{self, cargo_crate_version, get_target, update::Release};
 
-pub fn update(branch: String) -> Result<(), Box<dyn Error + Send + Sync>> {
+use crate::error::OdysseyError;
+
+pub fn update(branch: String) -> Result<(), OdysseyError> {
     self_update::backends::github::Update::configure()
         .repo_owner("Open-Resin-Alliance")
         .repo_name("Odyssey")
@@ -18,7 +18,7 @@ pub fn update(branch: String) -> Result<(), Box<dyn Error + Send + Sync>> {
     Ok(())
 }
 
-pub fn get_releases() -> Result<Vec<Release>, Box<dyn Error + Send + Sync>> {
+pub fn get_releases() -> Result<Vec<Release>, OdysseyError> {
     Ok(self_update::backends::github::ReleaseList::configure()
         .repo_owner("Open-Resin-Alliance")
         .repo_name("Odyssey")
