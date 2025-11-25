@@ -1,3 +1,5 @@
+mod files;
+
 use std::{
     ffi::OsStr,
     fs::File,
@@ -301,50 +303,6 @@ impl Api {
         )
         .await?)
     }
-    #[instrument(ret, skip(configuration))]
-    #[oai(path = "/files", method = "post")]
-    async fn upload_file(
-        &self,
-        file_upload: UploadPayload,
-        Data(configuration): Data<&Arc<Configuration>>,
-    ) -> Result<()> {
-        tracing::info!("Uploading file");
-
-        let file_name = file_upload
-            .file
-            .file_name()
-            .map(|s| s.to_string().clone())
-            .ok_or(BadRequest(GetDataError("Could not get file name")))?;
-
-        let bytes = file_upload.file.into_vec().await.map_err(BadRequest)?;
-
-        let mut f = File::create(format!("{}/{file_name}", configuration.api.upload_path))
-            .map_err(InternalServerError)?;
-        f.write_all(bytes.as_slice()).map_err(InternalServerError)?;
-
-        Ok(())
-    }
-    #[instrument(ret, skip(configuration))]
-    #[oai(path = "/files", method = "get")]
-    async fn get_files(
-        &self,
-        Query(subdirectory): Query<Option<String>>,
-        Query(location): Query<Option<LocationCategory>>,
-        Query(page_index): Query<Option<usize>>,
-        Query(page_size): Query<Option<usize>>,
-        Data(configuration): Data<&Arc<Configuration>>,
-    ) -> Result<Json<FilesResponse>> {
-        let location = location.unwrap_or(LocationCategory::Local);
-        let page_index = page_index.unwrap_or(DEFAULT_PAGE_INDEX);
-        let page_size = page_size.unwrap_or(DEFAULT_PAGE_SIZE);
-
-        match location {
-            LocationCategory::Local => {
-                Api::_get_local_files(subdirectory, page_index, page_size, &configuration.api)
-            }
-            LocationCategory::Usb => Api::_get_usb_files(page_index, page_size, &configuration.api),
-        }
-    }
 
     fn _get_local_files(
         subdirectory: Option<String>,
@@ -486,133 +444,6 @@ impl Api {
 
         Ok(Sl1::from_file(file_data).map_err(NotFound)?.get_metadata())
     }
-    #[instrument(ret, skip(configuration))]
-    #[oai(path = "/file", method = "get")]
-    async fn get_file(
-        &self,
-        Query(file_path): Query<String>,
-        Query(location): Query<Option<LocationCategory>>,
-        Data(configuration): Data<&Arc<Configuration>>,
-    ) -> Result<Attachment<Vec<u8>>> {
-        let location = location.unwrap_or(LocationCategory::Local);
-
-        tracing::info!("Getting file {:?} in {:?}", file_path, location);
-
-        let full_file_path = Api::get_file_path(&configuration.api, &file_path, &location)?;
-
-        let file_name = full_file_path
-            .file_name()
-            .and_then(|filestr| filestr.to_str())
-            .ok_or(InternalServerError(Error::new(
-                ErrorKind::NotFound,
-                "unable to parse file path",
-            )))?;
-
-        let mut open_file = File::open(full_file_path.clone()).map_err(InternalServerError)?;
-
-        let mut data: Vec<u8> = vec![];
-        open_file
-            .read_to_end(&mut data)
-            .map_err(InternalServerError)?;
-
-        Ok(Attachment::new(data).filename(file_name))
-    }
-    #[instrument(ret, skip(configuration))]
-    #[oai(path = "/file/metadata", method = "get")]
-    async fn get_file_metadata(
-        &self,
-        Query(file_path): Query<String>,
-        Query(location): Query<Option<LocationCategory>>,
-        Data(configuration): Data<&Arc<Configuration>>,
-    ) -> Result<Json<PrintMetadata>> {
-        let location = location.unwrap_or(LocationCategory::Local);
-
-        Ok(Json(Api::_get_print_metadata(
-            &file_path,
-            location,
-            &configuration.api,
-        )?))
-    }
-
-    #[instrument(ret, skip(configuration))]
-    #[oai(path = "/file/metadata", method = "patch")]
-    async fn patch_file_metadata(
-        &self,
-        Query(file_path): Query<String>,
-        Query(location): Query<Option<LocationCategory>>,
-        Json(patch_metadata): Json<UpdatePrintUserMetadata>,
-        Data(configuration): Data<&Arc<Configuration>>,
-    ) -> Result<Json<PrintMetadata>> {
-        let location = location.unwrap_or(LocationCategory::Local);
-
-        tracing::info!(
-            "Getting file metadata from {:?} in {:?}",
-            file_path,
-            location
-        );
-
-        let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
-        tracing::info!("Extracting print metadata");
-
-        Sl1::set_user_metadata(&file_data.open_file().map_err(NotFound)?, patch_metadata)
-            .map_err(InternalServerError)?;
-
-        Ok(Json(
-            Sl1::from_file(file_data).map_err(NotFound)?.get_metadata(),
-        ))
-    }
-
-    #[instrument(ret, skip(configuration))]
-    #[oai(path = "/file/thumbnail", method = "get")]
-    async fn get_thumbnail(
-        &self,
-        Query(file_path): Query<String>,
-        Query(location): Query<Option<LocationCategory>>,
-        Query(size): Query<Option<ThumbnailSize>>,
-        Data(configuration): Data<&Arc<Configuration>>,
-    ) -> Result<Attachment<Vec<u8>>> {
-        let location = location.unwrap_or(LocationCategory::Local);
-        let size = size.unwrap_or(ThumbnailSize::Small);
-
-        tracing::info!("Getting thumbnail from {:?} in {:?}", file_path, location);
-
-        let file_metadata = Api::_get_filedata(&file_path, location, &configuration.api)?;
-        tracing::info!("Extracting print thumbnail");
-
-        let file_data = Sl1::from_file(file_metadata)
-            .map_err(NotFound)?
-            .get_thumbnail(size)
-            .map_err(InternalServerError)?;
-
-        Ok(Attachment::new(file_data.data).filename(file_data.name))
-    }
-
-    #[instrument(ret, skip(configuration))]
-    #[oai(path = "/file", method = "delete")]
-    async fn delete_file(
-        &self,
-        Query(file_path): Query<String>,
-        Query(location): Query<Option<LocationCategory>>,
-        Data(configuration): Data<&Arc<Configuration>>,
-    ) -> Result<Json<FileMetadata>> {
-        let location = location.unwrap_or(LocationCategory::Local);
-        tracing::info!("Deleting file {:?} in {:?}", file_path, location);
-
-        let metadata = Api::_get_filedata(&file_path, location, &configuration.api)?;
-        let full_file_path = metadata.get_full_path();
-
-        if full_file_path.is_dir() {
-            fs::remove_dir_all(full_file_path)
-                .await
-                .map_err(InternalServerError)?;
-        } else {
-            fs::remove_file(full_file_path)
-                .await
-                .map_err(InternalServerError)?;
-        }
-
-        Ok(Json(metadata))
-    }
 }
 
 async fn run_state_listener(
@@ -659,7 +490,7 @@ pub async fn start_api(
 
     let addr = format!("0.0.0.0:{0}", full_config.api.port);
 
-    let api_service = OpenApiService::new(Api, "Odyssey API", "1.0");
+    let api_service = OpenApiService::new((Api, files::FilesApi), "Odyssey API", "1.0");
 
     let ui = api_service.swagger_ui();
 
