@@ -51,10 +51,10 @@ pub struct FilesResponse {
 }
 const DEFAULT_PAGE_INDEX: usize = 0;
 const DEFAULT_PAGE_SIZE: usize = 100;
-#[OpenApi(prefix_path = "/files")]
+#[OpenApi]
 impl FilesApi {
     #[instrument(ret, skip(configuration))]
-    #[oai(path = "/", method = "post")]
+    #[oai(path = "/files", method = "post")]
     async fn upload_file(
         &self,
         file_upload: UploadPayload,
@@ -77,7 +77,7 @@ impl FilesApi {
         Ok(())
     }
     #[instrument(ret, skip(configuration))]
-    #[oai(path = "/", method = "get")]
+    #[oai(path = "/files", method = "get")]
     async fn get_files(
         &self,
         Query(subdirectory): Query<Option<String>>,
