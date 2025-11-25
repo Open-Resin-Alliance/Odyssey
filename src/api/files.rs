@@ -6,7 +6,6 @@ use std::{
     sync::Arc,
 };
 
-use futures::StreamExt;
 use glob::glob;
 use itertools::Itertools;
 use poem::{
@@ -15,7 +14,7 @@ use poem::{
         NotImplemented, Unauthorized,
     },
     web::Data,
-    EndpointExt, Result,
+    Result,
 };
 use poem_openapi::{
     param::Query,
