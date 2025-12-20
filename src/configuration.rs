@@ -34,6 +34,7 @@ pub struct GcodeConfig {
     pub shutdown: String,
     pub home_command: String,
     pub move_command: String,
+    pub manual_move_command: Option<String>,
     pub print_start: String,
     pub print_end: String,
     pub layer_start: String,

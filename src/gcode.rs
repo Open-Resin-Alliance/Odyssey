@@ -127,15 +127,28 @@ impl HardwareControl for Gcode {
         Ok(self.state)
     }
 
-    async fn move_z(&mut self, z: u32, speed: f64) -> Result<PhysicalState, OdysseyError> {
+    async fn move_z(
+        &mut self,
+        z: u32,
+        speed: f64,
+        manual: bool,
+    ) -> Result<PhysicalState, OdysseyError> {
         // Convert from mm/s to mm/min f value
         let speed = speed * 60.0;
+
+        let command = match manual {
+            true => match &self.config.manual_move_command {
+                Some(manual_move) => manual_move.clone(),
+                None => self.config.move_command.clone(),
+            },
+            false => self.config.move_command.clone(),
+        };
 
         self.set_position(z);
         self.add_print_variable("speed".to_string(), speed.to_string());
 
         self.send_and_await_gcode(
-            self.config.move_command.clone(),
+            command,
             &self.config.move_sync.clone(),
             self.config.move_timeout,
         )
