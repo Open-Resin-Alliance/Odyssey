@@ -41,25 +41,30 @@ pub struct PrintDisplay {
 
 impl PrintDisplay {
     fn re_encode(&self, buffer: Vec<u8>, bit_depth: u8) -> Vec<u8> {
-        if self.config.bit_depth.len() == 1 && self.config.bit_depth[0] == bit_depth {
-            return buffer;
+
+        return Self::_re_encode(buffer, bit_depth, &self.config.bit_depth)
+    }
+
+    fn _re_encode(image_buffer: Vec<u8>, image_bit_depth: u8, display_bit_depths: &Vec<u8>) -> Vec<u8> {
+        if display_bit_depths.len() == 1 && display_bit_depths[0] == image_bit_depth {
+            return image_buffer;
         }
 
-        let chunk_size: u8 = self.config.bit_depth.iter().sum(); //8
-        let pixels_per_chunk = self.config.bit_depth.len(); //1
-        tracing::info!("Re-encoding frame with bit-depth {} into {} pixels in {} bits, with the following bit layout: {:?}", bit_depth, pixels_per_chunk, chunk_size, self.config.bit_depth);
+        let chunk_size: u8 = display_bit_depths.iter().sum(); //8
+        let pixels_per_chunk = display_bit_depths.len(); //1
+        tracing::info!("Re-encoding frame with bit-depth {} into {} pixels in {} bits, with the following bit layout: {:?}", image_bit_depth, pixels_per_chunk, chunk_size, display_bit_depths);
 
         let mut new_buffer: Vec<u8> = Vec::new();
 
-        buffer
+        image_buffer
             .chunks_exact(pixels_per_chunk)
             .for_each(|pixel_chunk| {
                 // raw binary chunk of pixels, to be broken into bytes and repacked in the Vector later
                 let mut raw_chunk = 0b0;
                 let mut pos_shift = chunk_size;
                 for i in 0..pixels_per_chunk {
-                    let depth_difference = bit_depth - self.config.bit_depth[i];
-                    pos_shift -= self.config.bit_depth[i];
+                    let depth_difference = image_bit_depth - display_bit_depths[i];
+                    pos_shift -= display_bit_depths[i];
 
                     // Truncate the pixel data to the display's bit depth, then shift it into place in the raw chunk
                     let shifted_pixel: u64 =
@@ -118,5 +123,45 @@ impl PrintDisplay {
 impl Clone for PrintDisplay {
     fn clone(&self) -> Self {
         Self::new(&self.config.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_re_encode_565() {
+        // Input buffer of 3 bytes
+        let image_buffer: Vec<u8> = vec![0xFF,0xFF,0xFF];
+        let image_bit_depth = 8;
+
+        // Re-encoded for 565 bit schema
+        let display_bit_depths = vec![5,6,5];
+
+        // Should output two bytes, corresponding to 11111 111111 11111
+        let expected_result = vec![0xFF,0xFF];
+
+        let result = PrintDisplay::_re_encode(image_buffer, image_bit_depth, &display_bit_depths);
+
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_re_encode_noop() {
+        // Input buffer of 3 bytes
+        let image_buffer: Vec<u8> = vec![0xFF,0xFF,0xFF];
+        let image_bit_depth = 8;
+
+        // no-op re-encoded for 8 bit display
+        let display_bit_depths = vec![8];
+
+        // Should output exactly what came in
+        let expected_result = vec![0xFF,0xFF,0xFF];
+
+        let result = PrintDisplay::_re_encode(image_buffer, image_bit_depth, &display_bit_depths);
+
+        assert_eq!(result, expected_result);
+
     }
 }
