@@ -26,6 +26,7 @@ display:
     - 3
     - 3
     - 3
+  pixel_padding: 8
   screen_width: 15136
   screen_height: 6230
 
