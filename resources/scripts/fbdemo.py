@@ -2,7 +2,7 @@
 import math
 import time
 
-frame_buffer = "/dev/null"
+frame_buffer = "/dev/fb0"
 
 def bits_append(current,suffix, suffix_len):
     return (current << suffix_len) | suffix
@@ -94,8 +94,9 @@ while True:
 pattern = pattern_line_bytes([0,2**3-1,]*16,bit_depth, mono_pixel_width, 8, 32)
 write_line_shifting(frame_buffer,pattern, height,4,delay_ms=0.5)
 
+"""
 while True:
     write_line(frame_buffer,pattern, 1)
     pattern.insert(0,pattern.pop())
-
+"""
 
