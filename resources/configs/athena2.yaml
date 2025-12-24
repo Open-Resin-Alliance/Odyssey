@@ -1,5 +1,4 @@
-# This is the default Odyssey configuration file for the Prometheus MSLA. It is
-# meant to be paired with the latest Prometheus MSLA klipper config.
+# This is the default Odyssey configuration file for the C3D Athena 2
 
 # This section holds the config fields related to the printer, such as its serial
 # connection and its frame buffer specs
@@ -17,16 +16,17 @@ printer:
 # This section holds fields pertaining to the display used by the printer
 display:
   frame_buffer: /dev/fb0
-  bit_depth:
-    - 3
-    - 3
-    - 3
-    - 3
-    - 3
-    - 3
-    - 3
-    - 3
-  pixel_padding: 8
+  pixel_format:
+    bit_depth:
+        - 3
+        - 3
+        - 3
+        - 3
+        - 3
+        - 3
+        - 3
+        - 3
+    right_pad_bits: 8
   screen_width: 15136
   screen_height: 6230
 
