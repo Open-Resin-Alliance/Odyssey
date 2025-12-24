@@ -2,7 +2,9 @@ use framebuffer::Framebuffer;
 use png::Decoder;
 
 use crate::{
-    api_objects::DisplayTest, configuration::DisplayConfig, wrapped_framebuffer::WrappedFramebuffer,
+    api_objects::DisplayTest,
+    configuration::{DisplayConfig, PixelFormat},
+    wrapped_framebuffer::WrappedFramebuffer,
 };
 
 #[derive(Clone)]
@@ -40,23 +42,64 @@ pub struct PrintDisplay {
 }
 
 impl PrintDisplay {
+    fn re_encode_pixel_group(
+        pixel_format: &PixelFormat,
+        pixels: &[u8],
+        bit_depth: u8,
+        chunk_size: u8,
+    ) -> Vec<u8> {
+        let mut raw_chunk = 0b0;
+        let mut chunk_bytes: Vec<u8> = Vec::new();
+        let mut shift = chunk_size - pixel_format.left_pad_bits;
+        for i in 0..pixels.len() {
+            print!("{}\n",i);
+            shift -= pixel_format.bit_depth[i];
+
+            // Truncate the pixel data to the displays bit depth, then shift it into place in the raw chunk bits
+            raw_chunk |= ((pixels[i] as u64) >> (bit_depth - pixel_format.bit_depth[i])) << shift
+        }
+
+        print!("{:#032b}\n",raw_chunk);
+
+        for i in 0..(chunk_size / 8) {
+            // pull the raw chunk back apart into bytes, for push into the new buffer
+            let byte = ((raw_chunk >> (8 * i)) & 0xFF) as u8;
+            chunk_bytes.push(byte);
+            print!("{}\n",i)
+        }
+
+        chunk_bytes
+    }
     fn re_encode(&self, buffer: Vec<u8>, bit_depth: u8) -> Vec<u8> {
-        if self.config.bit_depth.len() == 1 && self.config.bit_depth[0] == bit_depth {
+        if self.config.pixel_format.bit_depth.len() == 1
+            && self.config.pixel_format.bit_depth[0] == bit_depth
+        {
             return buffer;
         }
 
-        let chunk_size: u8 = self.config.bit_depth.iter().sum(); //8
-        let pixels_per_chunk = self.config.bit_depth.len(); //1
-        tracing::info!("Re-encoding frame with bit-depth {} into {} pixels in {} bits, with the following bit layout: {:?}", bit_depth, pixels_per_chunk, chunk_size, self.config.bit_depth);
+        let chunk_size: u8 = self.config.pixel_format.left_pad_bits
+            + self.config.pixel_format.bit_depth.iter().sum::<u8>()
+            + self.config.pixel_format.right_pad_bits;
+        tracing::debug!("Re-encoding frame with bit-depth {} into {} pixels in {} bits, with the following bit layout: {:?}", bit_depth, self.config.pixel_format.bit_depth.len(), chunk_size, self.config.pixel_format.bit_depth);
 
-        let mut new_buffer: Vec<u8> = Vec::new();
+        return buffer
+            .chunks_exact(self.config.pixel_format.bit_depth.len())
+            .flat_map(|pixel_group| {
+                Self::re_encode_pixel_group(
+                    &self.config.pixel_format,
+                    pixel_group,
+                    bit_depth,
+                    chunk_size,
+                )
+            })
+            .collect();
 
-        buffer
-            .chunks_exact(pixels_per_chunk)
-            .for_each(|pixel_chunk| {
+        /*.for_each(|pixel_chunk| {
+
+
                 // raw binary chunk of pixels, to be broken into bytes and repacked in the Vector later
                 let mut raw_chunk = 0b0;
-                let mut pos_shift = chunk_size;
+                let mut pos_shift = chunk_size-self.config.pad_left;
                 for i in 0..pixels_per_chunk {
                     let depth_difference = bit_depth - self.config.bit_depth[i];
                     pos_shift -= self.config.bit_depth[i];
@@ -72,9 +115,10 @@ impl PrintDisplay {
                     let byte = ((raw_chunk >> (8 * i)) & 0xFF) as u8;
                     new_buffer.push(byte);
                 }
+
             });
 
-        new_buffer
+        new_buffer*/
     }
 
     pub fn display_frame(&mut self, frame: Frame) {
@@ -118,5 +162,94 @@ impl PrintDisplay {
 impl Clone for PrintDisplay {
     fn clone(&self) -> Self {
         Self::new(&self.config.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_re_encode_565() {
+        // Input buffer of 3 1-byte pixels
+        let image_buffer: [u8; 3] = [0xFF, 0xFF, 0xFF];
+        let image_bit_depth = 8;
+
+        let chunk_size = 16;
+
+        // Re-encoded for 565 bit schema
+        let pixel_format = PixelFormat {
+            bit_depth: vec![5, 6, 5],
+            left_pad_bits: 0,
+            right_pad_bits: 0,
+        };
+
+        // Should output two bytes, corresponding to 11111 111111 11111
+        let expected_result = vec![0xFF, 0xFF];
+
+        let result = PrintDisplay::re_encode_pixel_group(
+            &pixel_format,
+            &image_buffer,
+            image_bit_depth,
+            chunk_size
+        );
+
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_re_encode_3bit8() {
+        // Input buffer of 8 1-byte pixels
+        let image_buffer: [u8; 8] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+        let image_bit_depth = 8;
+
+        let chunk_size = 32;
+
+        // Re-encoded for 16k bit schema
+        let pixel_format = PixelFormat {
+            bit_depth: vec![3, 3, 3, 3, 3, 3, 3, 3],
+            left_pad_bits: 0,
+            right_pad_bits: 8,
+        };
+
+        // Should output four bytes, corresponding to values of 7,7,7,7,7,7,7,7,<PADDING>
+        let expected_result = vec![0x00, 0xFF, 0xFF, 0xFF];
+
+        let result = PrintDisplay::re_encode_pixel_group(
+            &pixel_format,
+            &image_buffer,
+            image_bit_depth,
+            chunk_size
+        );
+
+        assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_re_encode_noop() {
+        // Input buffer of 1 1-byte pixel
+        let image_buffer: [u8; 1] = [0xFF];
+        let image_bit_depth = 8;
+
+        let chunk_size = 8;
+
+        // Re-encoded for 565 bit schema
+        let pixel_format = PixelFormat {
+            bit_depth: vec![8],
+            left_pad_bits: 0,
+            right_pad_bits: 0,
+        };
+
+        // Should output the same as what was input
+        let expected_result = vec![0xFF];
+
+        let result = PrintDisplay::re_encode_pixel_group(
+            &pixel_format,
+            &image_buffer,
+            image_bit_depth,
+            chunk_size,
+        );
+
+        assert_eq!(result, expected_result);
     }
 }
