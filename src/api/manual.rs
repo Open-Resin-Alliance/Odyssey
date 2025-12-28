@@ -7,8 +7,8 @@ use tracing::instrument;
 
 use crate::{
     api::Api,
-    api_objects::{DisplayTest, LocationCategory},
-    configuration::Configuration,
+    api_objects::{DisplayTest},
+    configuration::{Configuration, PrintUploadDirectory},
     printer::Operation,
 };
 
@@ -83,12 +83,12 @@ impl ManualApi {
     async fn manual_display_layer(
         &self,
         Query(file_path): Query<String>,
-        Query(location): Query<Option<LocationCategory>>,
+        Query(print_upload_directory): Query<Option<PrintUploadDirectory>>,
         Query(layer): Query<usize>,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<()> {
-        let location = location.unwrap_or(LocationCategory::Local);
+        let print_upload_directory = print_upload_directory.unwrap_or(LocationCategory::Local);
 
         let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
 

@@ -45,20 +45,34 @@ pub struct GcodeConfig {
     pub status_desired: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Object)]
+pub struct PrintUploadDirectory {
+    pub label: String,
+    pub description: Option<String>,
+    pub path: String
+}
+
 #[optional_struct(UpdateApiConfig)]
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct ApiConfig {
-    pub upload_path: String,
-    pub usb_glob: String,
+    pub print_upload_dirs: Vec<PrintUploadDirectory>,
     pub port: u16,
     pub enable_docs: Option<bool>,
+}
+
+impl ApiConfig {
+    pub fn get_print_upload_dir(&self, label: &Option<String>) -> Option<&PrintUploadDirectory> {
+        self.print_upload_dirs.iter()
+        .filter(|upload_dir| label.map_or(|label_string| upload_dir.label.eq_ignore_ascii_case(label_string),true))
+        .filter(|upload_dir| upload_dir.label.eq_ignore_ascii_case(label))
+        .next()
+    }
 }
 
 impl Default for ApiConfig {
     fn default() -> ApiConfig {
         ApiConfig {
-            upload_path: "uploads".to_string(),
-            usb_glob: "".to_string(),
+            print_upload_dirs: vec!(PrintUploadDirectory {label: "Uploads".to_string(), description: None, path: "uploads".to_string()}),
             port: 12357,
             enable_docs: Some(false),
         }

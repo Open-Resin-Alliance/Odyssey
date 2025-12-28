@@ -9,11 +9,7 @@ use optional_struct::optional_struct;
 use poem_openapi::{Enum, Object};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize, Enum)]
-pub enum LocationCategory {
-    Local,
-    Usb,
-}
+use crate::configuration::PrintUploadDirectory;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct FileData {
@@ -27,20 +23,18 @@ pub struct FileMetadata {
     pub name: String,
     pub last_modified: Option<u64>,
     pub file_size: u64,
-    pub location_category: LocationCategory,
-    pub parent_path: String,
+    pub upload_directory: PrintUploadDirectory,
 }
 
 impl FileMetadata {
     pub fn from_path(
         file_path: &str,
-        parent_path: &str,
-        location: LocationCategory,
+        upload_directory: PrintUploadDirectory,
     ) -> Result<Self, io::Error>
     where
         Self: Sized,
     {
-        let path = Path::new(parent_path).join(file_path);
+        let path = Path::new(upload_directory.path).join(file_path);
 
         let metadata = path.metadata()?;
 
@@ -66,8 +60,7 @@ impl FileMetadata {
             name,
             last_modified: modified_time,
             file_size,
-            location_category: location,
-            parent_path: parent_path.to_string(),
+            upload_directory
         })
     }
     pub fn get_full_path(&self) -> PathBuf {

@@ -28,9 +28,9 @@ use tracing::instrument;
 
 use crate::{
     api_objects::{
-        FileMetadata, LocationCategory, PrintMetadata, ThumbnailSize, UpdatePrintUserMetadata,
+        FileMetadata, PrintMetadata, ThumbnailSize, UpdatePrintUserMetadata,
     },
-    configuration::{ApiConfig, Configuration},
+    configuration::{ApiConfig, PrintUploadDirectory, Configuration},
     printfile::PrintFile,
     sl1::Sl1,
 };
