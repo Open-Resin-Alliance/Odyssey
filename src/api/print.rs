@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use poem::{web::Data, Result};
-use poem_openapi::{
-    param::{Path as PathParam, Query},
-    OpenApi,
-};
+use poem_openapi::{param::Query, OpenApi};
 use tokio::sync::mpsc;
 use tracing::instrument;
 

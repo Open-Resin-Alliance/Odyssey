@@ -71,8 +71,7 @@ impl ApiConfig {
             Some(label) => self
                 .print_upload_dirs
                 .iter()
-                .filter(|upload_dir| upload_dir.label.eq_ignore_ascii_case(label))
-                .next()
+                .find(|upload_dir| upload_dir.label.eq_ignore_ascii_case(label))
                 .ok_or(OdysseyError::file_error(
                     format!("No upload directory configured for {label}").into(),
                     404,
@@ -83,8 +82,7 @@ impl ApiConfig {
 
     pub fn get_default_print_upload_dir(&self) -> Result<&PrintUploadDirectory, OdysseyError> {
         self.print_upload_dirs
-            .iter()
-            .next()
+            .first()
             .ok_or(OdysseyError::file_error(
                 "No upload directories configured".into(),
                 404,

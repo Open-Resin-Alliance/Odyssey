@@ -1,5 +1,3 @@
-use std::io;
-use std::sync::atomic::AtomicPtr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -19,7 +17,6 @@ use crate::display::*;
 use crate::error::OdysseyError;
 use crate::printfile::Layer;
 use crate::printfile::PrintFile;
-use crate::sl1::*;
 use tokio::time::{interval, sleep, Duration};
 
 pub struct Printer<'a, T: HardwareControl> {
@@ -72,7 +69,7 @@ impl<T: HardwareControl> Printer<'_, T> {
     }
 
     pub async fn print_event_loop(&mut self) -> Result<(), OdysseyError> {
-        let mut file: Arc<RwLock<Box<dyn PrintFile + Send + Sync>>> = Arc::new(RwLock::new(
+        let file: Arc<RwLock<Box<dyn PrintFile + Send + Sync>>> = Arc::new(RwLock::new(
             self.get_print_metadata()
                 .ok_or(OdysseyError::internal_state_error(
                     "Currently printing but no file data available".into(),

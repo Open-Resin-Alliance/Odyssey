@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{self, Error, Read},
+    io::{self, Read},
 };
 
 use async_trait::async_trait;

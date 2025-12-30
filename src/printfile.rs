@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::{self, Error},
-    path::PathBuf,
-};
+use std::{fs::File, path::PathBuf};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -76,7 +71,7 @@ impl<'a> TryInto<&'a mut dyn PrintFile> for FileMetadata {
     }
 }
 
-impl<'a> TryInto<Box<dyn PrintFile + Send + Sync>> for FileMetadata {
+impl TryInto<Box<dyn PrintFile + Send + Sync>> for FileMetadata {
     type Error = OdysseyError;
 
     fn try_into(self) -> Result<Box<dyn PrintFile + Send + Sync>, Self::Error> {

@@ -1,18 +1,11 @@
 use std::{
-    ffi::OsStr,
     fs::File,
-    io::{Error, ErrorKind, Read, Write},
-    path::{Path, PathBuf},
+    io::{Read, Write},
     sync::Arc,
 };
 
-use glob::glob;
-use itertools::Itertools;
 use poem::{
-    error::{
-        BadRequest, GetDataError, InternalServerError, MethodNotAllowedError, NotFound,
-        NotImplemented, Unauthorized,
-    },
+    error::{BadRequest, GetDataError, InternalServerError},
     web::Data,
     Result,
 };
@@ -20,17 +13,14 @@ use poem_openapi::{
     param::{Path as PathParam, Query},
     payload::{Attachment, Json},
     types::multipart::Upload,
-    Multipart, Object, OpenApi,
+    Multipart, OpenApi,
 };
-use serde::{Deserialize, Serialize};
-use tokio::fs;
 use tracing::instrument;
 
 use crate::{
     api_objects::{FileMetadata, PrintMetadata, ThumbnailSize, UpdatePrintUserMetadata},
-    configuration::{ApiConfig, Configuration, PrintUploadDirectory},
+    configuration::Configuration,
     printfile::PrintFile,
-    sl1::Sl1,
     uploads::FilesResponse,
 };
 

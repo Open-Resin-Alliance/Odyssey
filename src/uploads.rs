@@ -24,65 +24,6 @@ pub struct FilesResponse {
 const DEFAULT_PAGE_INDEX: usize = 0;
 const DEFAULT_PAGE_SIZE: usize = 100;
 
-fn get_files(
-    print_upload_directory: PrintUploadDirectory,
-    subdirectory: Option<String>,
-    page_index: Option<usize>,
-    page_size: Option<usize>,
-) -> Result<FilesResponse, OdysseyError> {
-    let upload_path =
-        Path::new(&print_upload_directory.path).join(subdirectory.unwrap_or("".to_string()));
-
-    let page_index = page_index.unwrap_or(DEFAULT_PAGE_INDEX);
-    let page_size = page_size.unwrap_or(DEFAULT_PAGE_SIZE);
-
-    let mut files = Vec::with_capacity(page_size);
-    let mut print_files = Vec::with_capacity(page_size);
-    let mut dirs = Vec::with_capacity(page_size);
-
-    // Temporary value to ensure the paged results are not dropped from memory
-    let paged_paths = upload_path
-        .read_dir()?
-        .flatten()
-        .filter_map(|f| {
-            f.path()
-                .strip_prefix(&upload_path)
-                .map(|path_ref| path_ref.to_owned())
-                .ok()
-        })
-        // TODO add sorting here
-        .chunks(page_size);
-
-    let mut paged_paths_iter = paged_paths.into_iter();
-
-    if let Some(path_page) = paged_paths_iter.nth(page_index) {
-        path_page
-            .map(|path| print_upload_directory.get_file_from_pathbuf(&path))
-            .for_each(|file_data| {
-                if let Ok(file_data) = file_data {
-                    match file_data.file_type {
-                        crate::api_objects::FileType::Directory => dirs.push(file_data),
-                        crate::api_objects::FileType::SL1 => {
-                            if let Ok(print_file) = TryInto::<&dyn PrintFile>::try_into(file_data) {
-                                print_files.push(print_file.get_metadata());
-                            }
-                        }
-                        crate::api_objects::FileType::UnknownFile => files.push(file_data),
-                    }
-                }
-            })
-    };
-
-    let next_index = Some(page_index + 1).filter(|_| paged_paths_iter.next().is_some());
-
-    Ok(FilesResponse {
-        print_files,
-        files,
-        dirs,
-        next_index,
-    })
-}
-
 impl PrintUploadDirectory {
     pub fn get_file_from_subdir(
         &self,
@@ -95,7 +36,7 @@ impl PrintUploadDirectory {
     }
 
     pub fn get_file_from_pathbuf(&self, file_path: &PathBuf) -> Result<FileMetadata, OdysseyError> {
-        let path: PathBuf = Path::new(&self.path).join(&file_path);
+        let path: PathBuf = Path::new(&self.path).join(file_path);
 
         let metadata = path.metadata()?;
 

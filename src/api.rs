@@ -8,7 +8,6 @@ use std::{sync::Arc, time::Duration};
 
 use futures::{stream::BoxStream, StreamExt};
 use poem::{
-    error::NotFound,
     listener::TcpListener,
     middleware::Cors,
     web::{sse::Event, Data},
@@ -28,12 +27,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::{
-    api_objects::{FileMetadata, PhysicalState, PrintMetadata, PrinterState, PrinterStatus},
-    configuration::{ApiConfig, Configuration},
+    api_objects::{PhysicalState, PrinterState, PrinterStatus},
+    configuration::Configuration,
     error::OdysseyError,
     printer::Operation,
-    printfile::PrintFile,
-    sl1::Sl1,
 };
 
 #[derive(Debug)]

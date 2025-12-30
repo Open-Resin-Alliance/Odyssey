@@ -10,11 +10,7 @@ use poem_openapi::{Enum, Object};
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
-use crate::{
-    configuration::PrintUploadDirectory,
-    error::OdysseyError,
-    printfile::{PrintFile, PRINT_FILE_EXTENSIONS},
-};
+use crate::{configuration::PrintUploadDirectory, error::OdysseyError};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct FileData {
