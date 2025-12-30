@@ -20,7 +20,6 @@ use tracing::instrument;
 use crate::{
     api_objects::{FileMetadata, PrintMetadata, ThumbnailSize, UpdatePrintUserMetadata},
     configuration::Configuration,
-    error::OdysseyError,
     printfile::PrintFile,
     uploads::FilesResponse,
 };
