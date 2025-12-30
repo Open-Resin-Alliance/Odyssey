@@ -10,7 +10,7 @@ use poem::{
     Result,
 };
 use poem_openapi::{
-    param::{Path as PathParam, Query},
+    param::{Path, Query},
     payload::{Attachment, Json},
     types::multipart::Upload,
     Multipart, OpenApi,
@@ -33,14 +33,14 @@ struct UploadPayload {
     file: Upload,
 }
 
-#[OpenApi]
+#[OpenApi(prefix_path = "/files")]
 impl FilesApi {
     #[instrument(ret, skip(configuration))]
-    #[oai(path = "/files", method = "post")]
+    #[oai(path = "/", method = "post")]
     async fn upload_file(
         &self,
         file_upload: UploadPayload,
-        PathParam(directory_label): PathParam<Option<String>>,
+        Query(directory_label): Query<Option<String>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<()> {
         tracing::info!("Uploading file");
@@ -63,77 +63,31 @@ impl FilesApi {
     }
 
     #[instrument(ret, skip(configuration))]
-    #[oai(path = "/files/", method = "get")]
-    async fn get_files_from_default_dir(
+    #[oai(path = "/", method = "get")]
+    async fn get_files(
         &self,
+        Query(directory_label): Query<Option<String>>,
+        Query(subdirectory): Query<Option<String>>,
         Query(page_index): Query<Option<usize>>,
         Query(page_size): Query<Option<usize>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<FilesResponse>> {
-        Ok(FilesApi::_get_files(None, None, page_index, page_size, configuration).map(Json)?)
-    }
 
-    #[instrument(ret, skip(configuration))]
-    #[oai(path = "/files/:directory_label/", method = "get")]
-    async fn get_files_from_dir(
-        &self,
-        PathParam(directory_label): PathParam<String>,
-        Query(page_index): Query<Option<usize>>,
-        Query(page_size): Query<Option<usize>>,
-        Data(configuration): Data<&Arc<Configuration>>,
-    ) -> Result<Json<FilesResponse>> {
-        Ok(FilesApi::_get_files(
-            Some(directory_label),
-            None,
-            page_index,
-            page_size,
-            configuration,
-        )
-        .map(Json)?)
-    }
-
-    #[instrument(ret, skip(configuration))]
-    #[oai(path = "/files/:directory_label/:subdirectory", method = "get")]
-    async fn get_files_from_subdir(
-        &self,
-        PathParam(directory_label): PathParam<String>,
-        PathParam(subdirectory): PathParam<String>,
-        Query(page_index): Query<Option<usize>>,
-        Query(page_size): Query<Option<usize>>,
-        Data(configuration): Data<&Arc<Configuration>>,
-    ) -> Result<Json<FilesResponse>> {
-        Ok(FilesApi::_get_files(
-            Some(directory_label),
-            Some(subdirectory),
-            page_index,
-            page_size,
-            configuration,
-        )
-        .map(Json)?)
-    }
-
-    fn _get_files(
-        directory_label: Option<String>,
-        subdirectory: Option<String>,
-        page_index: Option<usize>,
-        page_size: Option<usize>,
-        configuration: &Arc<Configuration>,
-    ) -> Result<FilesResponse, OdysseyError> {
         let print_upload_dir = configuration.api.get_print_upload_dir(&directory_label)?;
 
-        print_upload_dir.get_files(subdirectory, page_index, page_size)
+        Ok(print_upload_dir.get_files(subdirectory, page_index, page_size).map(Json)?)
     }
 
     #[instrument(ret, skip(configuration))]
     #[oai(
-        path = "/file/:directory_label/:subdirectory/:filename",
+        path = "/:filename",
         method = "get"
     )]
     async fn get_file(
         &self,
-        PathParam(directory_label): PathParam<Option<String>>,
-        PathParam(subdirectory): PathParam<Option<String>>,
-        PathParam(filename): PathParam<String>,
+        Path(filename): Path<String>,
+        Query(directory_label): Query<Option<String>>,
+        Query(subdirectory): Query<Option<String>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Attachment<Vec<u8>>> {
         let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
@@ -151,14 +105,14 @@ impl FilesApi {
     }
     #[instrument(ret, skip(configuration))]
     #[oai(
-        path = "/file/:directory_label/:subdirectory/:filename/metadata",
+        path = "/:filename/metadata",
         method = "get"
     )]
     async fn get_file_metadata(
         &self,
-        PathParam(directory_label): PathParam<Option<String>>,
-        PathParam(subdirectory): PathParam<Option<String>>,
-        PathParam(filename): PathParam<String>,
+        Path(filename): Path<String>,
+        Query(directory_label): Query<Option<String>>,
+        Query(subdirectory): Query<Option<String>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<PrintMetadata>> {
         let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
@@ -172,14 +126,14 @@ impl FilesApi {
 
     #[instrument(ret, skip(configuration))]
     #[oai(
-        path = "/file/:directory_label/:subdirectory/:filename/metadata",
+        path = "/:filename/metadata",
         method = "patch"
     )]
     async fn patch_file_metadata(
         &self,
-        PathParam(directory_label): PathParam<Option<String>>,
-        PathParam(subdirectory): PathParam<Option<String>>,
-        PathParam(filename): PathParam<String>,
+        Path(filename): Path<String>,
+        Query(directory_label): Query<Option<String>>,
+        Query(subdirectory): Query<Option<String>>,
         Json(patch_metadata): Json<UpdatePrintUserMetadata>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<PrintMetadata>> {
@@ -202,14 +156,14 @@ impl FilesApi {
 
     #[instrument(ret, skip(configuration))]
     #[oai(
-        path = "/file/:directory_label/:subdirectory/:filename/thumbnail",
+        path = "/:filename/thumbnail",
         method = "get"
     )]
     async fn get_thumbnail(
         &self,
-        PathParam(directory_label): PathParam<Option<String>>,
-        PathParam(subdirectory): PathParam<Option<String>>,
-        PathParam(filename): PathParam<String>,
+        Path(filename): Path<String>,
+        Query(directory_label): Query<Option<String>>,
+        Query(subdirectory): Query<Option<String>>,
         Query(size): Query<Option<ThumbnailSize>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Attachment<Vec<u8>>> {
@@ -228,14 +182,14 @@ impl FilesApi {
 
     #[instrument(ret, skip(configuration))]
     #[oai(
-        path = "/file/:directory_label/:subdirectory/:filename/thumbnail",
+        path = "/:filename",
         method = "delete"
     )]
     async fn delete_file(
         &self,
-        PathParam(directory_label): PathParam<Option<String>>,
-        PathParam(subdirectory): PathParam<Option<String>>,
-        PathParam(filename): PathParam<String>,
+        Path(filename): Path<String>,
+        Query(directory_label): Query<Option<String>>,
+        Query(subdirectory): Query<Option<String>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<FileMetadata>> {
         let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
