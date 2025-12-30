@@ -18,7 +18,11 @@ use poem_openapi::{
 use tracing::instrument;
 
 use crate::{
-    api_objects::{FileMetadata, PrintMetadata, ThumbnailSize, UpdatePrintUserMetadata}, configuration::Configuration, error::OdysseyError, printfile::PrintFile, uploads::FilesResponse
+    api_objects::{FileMetadata, PrintMetadata, ThumbnailSize, UpdatePrintUserMetadata},
+    configuration::Configuration,
+    error::OdysseyError,
+    printfile::PrintFile,
+    uploads::FilesResponse,
 };
 
 #[derive(Debug)]
@@ -58,7 +62,6 @@ impl FilesApi {
         Ok(())
     }
 
-
     #[instrument(ret, skip(configuration))]
     #[oai(path = "/files/", method = "get")]
     async fn get_files_from_default_dir(
@@ -67,11 +70,8 @@ impl FilesApi {
         Query(page_size): Query<Option<usize>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<FilesResponse>> {
-        
-        Ok(FilesApi::_get_files(None, None, page_index, page_size, configuration)
-            .map(Json)?)
+        Ok(FilesApi::_get_files(None, None, page_index, page_size, configuration).map(Json)?)
     }
-
 
     #[instrument(ret, skip(configuration))]
     #[oai(path = "/files/:directory_label/", method = "get")]
@@ -82,9 +82,14 @@ impl FilesApi {
         Query(page_size): Query<Option<usize>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<FilesResponse>> {
-        
-        Ok(FilesApi::_get_files(Some(directory_label), None, page_index, page_size, configuration)
-            .map(Json)?)
+        Ok(FilesApi::_get_files(
+            Some(directory_label),
+            None,
+            page_index,
+            page_size,
+            configuration,
+        )
+        .map(Json)?)
     }
 
     #[instrument(ret, skip(configuration))]
@@ -97,16 +102,26 @@ impl FilesApi {
         Query(page_size): Query<Option<usize>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<FilesResponse>> {
-
-        Ok(FilesApi::_get_files(Some(directory_label), Some(subdirectory), page_index, page_size, configuration)
-            .map(Json)?)
+        Ok(FilesApi::_get_files(
+            Some(directory_label),
+            Some(subdirectory),
+            page_index,
+            page_size,
+            configuration,
+        )
+        .map(Json)?)
     }
 
-    fn _get_files(directory_label: Option<String>,subdirectory:Option<String>, page_index: Option<usize>, page_size: Option<usize>, configuration: &Arc<Configuration>) -> Result<FilesResponse,OdysseyError> {
+    fn _get_files(
+        directory_label: Option<String>,
+        subdirectory: Option<String>,
+        page_index: Option<usize>,
+        page_size: Option<usize>,
+        configuration: &Arc<Configuration>,
+    ) -> Result<FilesResponse, OdysseyError> {
         let print_upload_dir = configuration.api.get_print_upload_dir(&directory_label)?;
 
-        print_upload_dir
-            .get_files(subdirectory, page_index, page_size)
+        print_upload_dir.get_files(subdirectory, page_index, page_size)
     }
 
     #[instrument(ret, skip(configuration))]
@@ -178,8 +193,10 @@ impl FilesApi {
 
         Ok(Json(
             // Fully refetch metadata after operation
-            TryInto::<Box<dyn PrintFile + Send + Sync>>::try_into(print_file.get_metadata().file_data)?
-                .get_metadata(),
+            TryInto::<Box<dyn PrintFile + Send + Sync>>::try_into(
+                print_file.get_metadata().file_data,
+            )?
+            .get_metadata(),
         ))
     }
 
