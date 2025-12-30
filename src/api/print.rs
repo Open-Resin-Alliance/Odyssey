@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use poem::{web::Data, Result};
-use poem_openapi::{param::Query, OpenApi};
+use poem_openapi::{
+    param::{Path as PathParam, Query},
+    OpenApi,
+};
 use tokio::sync::mpsc;
 use tracing::instrument;
 
-use crate::{
-    api::Api, api_objects::LocationCategory, configuration::Configuration, printer::Operation,
-};
+use crate::{api::Api, configuration::Configuration, printer::Operation};
 
 #[derive(Debug)]
 pub struct PrintApi;
@@ -15,17 +16,18 @@ pub struct PrintApi;
 #[OpenApi(prefix_path = "/print")]
 impl PrintApi {
     #[instrument(ret, skip(operation_sender, configuration))]
-    #[oai(path = "/start", method = "post")]
+    #[oai(path = "/start/:sub", method = "post")]
     async fn start_print(
         &self,
-        Query(file_path): Query<String>,
-        Query(location): Query<Option<LocationCategory>>,
+        Query(directory_label): Query<Option<String>>,
+        Query(subdirectory): Query<Option<String>>,
+        Query(filename): Query<String>,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<()> {
-        let location = location.unwrap_or(LocationCategory::Local);
+        let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
 
-        let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
+        let file_data = print_upload_directory.get_file_from_subdir(&filename, subdirectory)?;
 
         Ok(
             Api::send_statemachine_operation(operation_sender, Operation::StartPrint { file_data })

@@ -12,6 +12,7 @@ use tokio::{
     },
     task::JoinError,
 };
+use zip::result::ZipError;
 
 #[derive(Debug)]
 pub struct OdysseyError {
@@ -126,6 +127,19 @@ impl<T: Debug + Send + Sync + 'static> From<mpscSendError<T>> for OdysseyError {
             error_type: ErrorType::HardwareError,
             source: Box::new(err),
             error_code: 500,
+        }
+    }
+}
+impl From<ZipError> for OdysseyError {
+    fn from(err: ZipError) -> OdysseyError {
+        match err {
+            ZipError::Io(error) => error.into(),
+            ZipError::InvalidArchive(error) | ZipError::UnsupportedArchive(error) => {
+                OdysseyError::file_error(error.into(), 400)
+            }
+            ZipError::FileNotFound => OdysseyError::file_error(Box::new(err), 404),
+            ZipError::InvalidPassword => OdysseyError::file_error(Box::new(err), 400),
+            _ => OdysseyError::file_error(Box::new(err), 500),
         }
     }
 }

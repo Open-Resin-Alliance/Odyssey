@@ -1,20 +1,28 @@
 use std::{
+    collections::HashMap,
     fs::File,
     io::{self, Error},
+    path::PathBuf,
 };
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use xattr::FileExt;
 
-use crate::api_objects::{
-    FileData, FileMetadata, PrintMetadata, PrintUserMetadata, ThumbnailSize,
-    UpdatePrintUserMetadata,
+use crate::{
+    api_objects::{
+        FileData, FileMetadata, FileType, PrintMetadata, PrintUserMetadata, ThumbnailSize,
+        UpdatePrintUserMetadata,
+    },
+    error::OdysseyError,
+    sl1::Sl1,
 };
 
 static XATTR_PRINT_COUNT: &str = "user.odyssey.print_count";
 static XATTR_PRINT_RATING: &str = "user.odyssey.print_rating";
 static XATTR_PRINT_FAVORITE: &str = "user.odyssey.favorite";
+
+pub static PRINT_FILE_EXTENSIONS: [&str; 1] = [".sl1"];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Layer {
@@ -23,16 +31,58 @@ pub struct Layer {
     pub exposure_time: f64,
 }
 
+impl FileType {
+    pub fn from_path(path: PathBuf) -> FileType {
+        if path.is_dir() {
+            FileType::Directory
+        } else {
+            FileType::from_extension(path.extension().and_then(|ext| ext.to_str()))
+        }
+    }
+    pub fn from_extension(extension: Option<&str>) -> FileType {
+        match extension.unwrap_or("").to_lowercase().as_str() {
+            ".sl1" => FileType::SL1,
+            _ => FileType::UnknownFile,
+        }
+    }
+
+    pub fn get_printfile(
+        &self,
+        file_data: FileMetadata,
+    ) -> Result<Box<impl PrintFile>, OdysseyError> {
+        match file_data.file_type {
+            FileType::SL1 => Ok(Box::new(Sl1::try_from(file_data)?)),
+            _ => Err(OdysseyError::file_error(
+                "Unsupported print file type".into(),
+                400,
+            )),
+        }
+    }
+}
+
+impl<'a> TryInto<&'a dyn PrintFile> for FileMetadata {
+    type Error = OdysseyError;
+
+    fn try_into(self) -> Result<&'a dyn PrintFile, Self::Error> {
+        todo!()
+    }
+}
+
+impl<'a> TryInto<&'a mut dyn PrintFile> for FileMetadata {
+    type Error = OdysseyError;
+
+    fn try_into(self) -> Result<&'a mut dyn PrintFile, Self::Error> {
+        todo!()
+    }
+}
+
 #[async_trait]
 pub trait PrintFile {
-    fn from_file(file_data: FileMetadata) -> Result<Self, io::Error>
-    where
-        Self: Sized;
     async fn get_layer_data(&mut self, index: usize) -> Option<Layer>;
     fn get_layer_count(&self) -> usize;
     fn get_layer_height(&self) -> u32;
     fn get_metadata(&self) -> PrintMetadata;
-    fn get_thumbnail(&mut self, size: ThumbnailSize) -> Result<FileData, Error>;
+    fn get_thumbnail(&mut self, size: ThumbnailSize) -> Result<FileData, OdysseyError>;
     // Optional fields not present in every file type
     fn get_lift(&self) -> Option<u32> {
         None
@@ -100,45 +150,34 @@ pub trait PrintFile {
             .filter(|val| *val != 0)
             .is_some()
     }
-    fn _set_xattr(file: &File, xattr_name: &str, value: &[u8]) -> Result<(), Error>
-    where
-        Self: Sized,
-    {
-        file.set_xattr(xattr_name, value)
+    fn _set_xattr(&self, file: &File, xattr_name: &str, value: &[u8]) -> Result<(), OdysseyError> {
+        Ok(file.set_xattr(xattr_name, value)?)
     }
-    fn set_user_metadata(file: &File, user_metadata: UpdatePrintUserMetadata) -> Result<(), Error>
-    where
-        Self: Sized,
-    {
+    fn set_user_metadata(
+        &self,
+        user_metadata: UpdatePrintUserMetadata,
+    ) -> Result<(), OdysseyError> {
+        let file = &self.get_metadata().file_data.open_file()?;
         let mut result = Ok(());
         if let Some(print_count) = user_metadata.print_count {
-            result = result.and(Self::set_print_count(file, print_count));
+            result = result.and(self.set_print_count(file, print_count));
         }
         if let Some(favorite) = user_metadata.favorite {
-            result = result.and(Self::set_favorite(file, favorite));
+            result = result.and(self.set_favorite(file, favorite));
         }
         if let Some(rating) = user_metadata.rating {
-            result = result.and(Self::set_rating(file, rating));
+            result = result.and(self.set_rating(file, rating));
         }
         result
     }
-    fn set_print_count(file: &File, val: u32) -> Result<(), Error>
-    where
-        Self: Sized,
-    {
-        Self::_set_xattr(file, XATTR_PRINT_COUNT, &val.to_be_bytes())
+    fn set_print_count(&self, file: &File, val: u32) -> Result<(), OdysseyError> {
+        self._set_xattr(file, XATTR_PRINT_COUNT, &val.to_be_bytes())
     }
-    fn set_rating(file: &File, val: u8) -> Result<(), Error>
-    where
-        Self: Sized,
-    {
-        Self::_set_xattr(file, XATTR_PRINT_RATING, &val.to_be_bytes())
+    fn set_rating(&self, file: &File, val: u8) -> Result<(), OdysseyError> {
+        self._set_xattr(file, XATTR_PRINT_RATING, &val.to_be_bytes())
     }
-    fn set_favorite(file: &File, val: bool) -> Result<(), Error>
-    where
-        Self: Sized,
-    {
+    fn set_favorite(&self, file: &File, val: bool) -> Result<(), OdysseyError> {
         let val: u8 = if val { 1 } else { 0 };
-        Self::_set_xattr(file, XATTR_PRINT_FAVORITE, &val.to_be_bytes())
+        self._set_xattr(file, XATTR_PRINT_FAVORITE, &val.to_be_bytes())
     }
 }

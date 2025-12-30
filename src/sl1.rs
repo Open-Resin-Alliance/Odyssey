@@ -11,6 +11,7 @@ use zip::ZipArchive;
 
 use crate::{
     api_objects::{FileData, FileMetadata, PrintMetadata, ThumbnailSize},
+    error::OdysseyError,
     printfile::{Layer, PrintFile},
 };
 
@@ -73,10 +74,10 @@ pub struct Sl1 {
     metadata: PrintMetadata,
 }
 
-#[async_trait]
-impl PrintFile for Sl1 {
-    /// Instantiate the Sl1 from the given file
-    fn from_file(file_data: FileMetadata) -> Result<Sl1, io::Error> {
+impl TryFrom<FileMetadata> for Sl1 {
+    type Error = OdysseyError;
+
+    fn try_from(file_data: FileMetadata) -> Result<Self, Self::Error> {
         tracing::info!("Loading PrintFile from SL1 {:?}", file_data);
 
         let file = File::open(file_data.get_full_path())?;
@@ -119,7 +120,10 @@ impl PrintFile for Sl1 {
             metadata,
         })
     }
+}
 
+#[async_trait]
+impl PrintFile for Sl1 {
     async fn get_layer_data(&mut self, index: usize) -> Option<Layer> {
         if index < self.frame_list.len() {
             let frame_file = self.archive.by_name(self.frame_list[index].as_str());
@@ -153,7 +157,7 @@ impl PrintFile for Sl1 {
         self.metadata.clone()
     }
 
-    fn get_thumbnail(&mut self, size: ThumbnailSize) -> Result<FileData, Error> {
+    fn get_thumbnail(&mut self, size: ThumbnailSize) -> Result<FileData, OdysseyError> {
         let mut thumbnail_file = match size {
             ThumbnailSize::Small => self.archive.by_name(THUMBNAIL_SMALL)?,
             ThumbnailSize::Large => self.archive.by_name(THUMBNAIL_LARGE)?,

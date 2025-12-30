@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 
@@ -25,6 +26,7 @@ pub struct Printer<'a, T: HardwareControl> {
     pub display: PrintDisplay,
     pub hardware_controller: T,
     pub state: PrinterState,
+    print_file: Option<&'a mut dyn PrintFile>,
     pub operation_receiver: mpsc::Receiver<Operation>,
     pub status_sender: broadcast::Sender<PrinterState>,
     pub cancellation_token: CancellationToken,
@@ -64,14 +66,21 @@ impl<T: HardwareControl> Printer<'_, T> {
             operation_receiver,
             status_sender,
             cancellation_token,
+            print_file: None,
         };
 
         printer.start_statemachine().await
     }
 
-    pub async fn print_event_loop(&mut self) -> Result<(), io::Error> {
-        let mut file: Box<dyn PrintFile + Send> =
-            Box::new(Sl1::from_file(self.get_file_data().unwrap())?);
+    pub async fn print_event_loop(&mut self) -> Result<(), OdysseyError> {
+        let file: &mut dyn PrintFile = self
+            .get_print_metadata()
+            .ok_or(OdysseyError::internal_state_error(
+                "Currently printing but no file data available".into(),
+                500,
+            ))?
+            .file_data
+            .try_into()?;
 
         let layer_height = file.get_layer_height();
 
@@ -275,11 +284,11 @@ impl<T: HardwareControl> Printer<'_, T> {
         self.update_layer(layer).await;
     }
 
-    pub async fn start_print(&mut self, file_data: FileMetadata) -> Result<(), io::Error> {
+    pub async fn start_print(&mut self, file_data: FileMetadata) -> Result<(), OdysseyError> {
         tracing::info!("Starting Print");
 
-        let print_data = Sl1::from_file(file_data)?.get_metadata();
-        self.enter_printing_state(print_data).await;
+        let print_file: &dyn PrintFile = file_data.try_into()?;
+        self.enter_printing_state(print_file.get_metadata()).await;
         Ok(())
     }
 
@@ -326,24 +335,21 @@ impl<T: HardwareControl> Printer<'_, T> {
                 .unwrap_or(0)
     }
 
-    fn get_file_data(&self) -> Option<FileMetadata> {
-        self.state
-            .print_data
-            .clone()
-            .map(|print_data| print_data.file_data)
+    fn get_print_metadata(&self) -> Option<PrintMetadata> {
+        self.state.print_data.clone()
     }
 
     async fn display_file_layer(
         &mut self,
         file_data: FileMetadata,
         layer: usize,
-    ) -> Result<(), io::Error> {
-        let mut file: Box<dyn PrintFile + Send> = Box::new(Sl1::from_file(file_data.clone())?);
+    ) -> Result<(), OdysseyError> {
+        tracing::info!("Loading layer {} from {} to display", layer, file_data.name);
+        let file: &mut dyn PrintFile = file_data.try_into()?;
 
         let optional_frame = Frame::from_layer(file.get_layer_data(layer).await).await;
 
         if let Some(frame) = optional_frame {
-            tracing::info!("Loading layer {} from {} to display", layer, file_data.name);
             self.display.display_frame(frame);
         }
         Ok(())

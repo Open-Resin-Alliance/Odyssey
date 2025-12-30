@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Debug, fs, io, sync::Arc};
 use tokio::sync::RwLock;
 
+use crate::error::OdysseyError;
+
 #[optional_struct(UpdatePrinterConfig)]
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct PrinterConfig {
@@ -49,7 +51,7 @@ pub struct GcodeConfig {
 pub struct PrintUploadDirectory {
     pub label: String,
     pub description: Option<String>,
-    pub path: String
+    pub path: String,
 }
 
 #[optional_struct(UpdateApiConfig)]
@@ -61,18 +63,43 @@ pub struct ApiConfig {
 }
 
 impl ApiConfig {
-    pub fn get_print_upload_dir(&self, label: &Option<String>) -> Option<&PrintUploadDirectory> {
-        self.print_upload_dirs.iter()
-        .filter(|upload_dir| label.map_or(|label_string| upload_dir.label.eq_ignore_ascii_case(label_string),true))
-        .filter(|upload_dir| upload_dir.label.eq_ignore_ascii_case(label))
-        .next()
+    pub fn get_print_upload_dir(
+        &self,
+        label: &Option<String>,
+    ) -> Result<&PrintUploadDirectory, OdysseyError> {
+        match label {
+            Some(label) => self
+                .print_upload_dirs
+                .iter()
+                .filter(|upload_dir| upload_dir.label.eq_ignore_ascii_case(label))
+                .next()
+                .ok_or(OdysseyError::file_error(
+                    format!("No upload directory configured for {label}").into(),
+                    404,
+                )),
+            None => self.get_default_print_upload_dir(),
+        }
+    }
+
+    pub fn get_default_print_upload_dir(&self) -> Result<&PrintUploadDirectory, OdysseyError> {
+        self.print_upload_dirs
+            .iter()
+            .next()
+            .ok_or(OdysseyError::file_error(
+                "No upload directories configured".into(),
+                404,
+            ))
     }
 }
 
 impl Default for ApiConfig {
     fn default() -> ApiConfig {
         ApiConfig {
-            print_upload_dirs: vec!(PrintUploadDirectory {label: "Uploads".to_string(), description: None, path: "uploads".to_string()}),
+            print_upload_dirs: vec![PrintUploadDirectory {
+                label: "Uploads".to_string(),
+                description: None,
+                path: "uploads".to_string(),
+            }],
             port: 12357,
             enable_docs: Some(false),
         }
