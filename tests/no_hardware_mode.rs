@@ -1,7 +1,7 @@
 use std::{fs, sync::Arc, time::Duration};
 
 use crate::common::{mock_serial_handler::MockSerialHandler, test_resource_path};
-use odyssey::configuration::Configuration;
+use odyssey::configuration::{Configuration, PrintUploadDirectory};
 use tokio::{
     runtime::{Builder, Runtime},
     sync::broadcast::{self, Receiver, Sender},
@@ -47,7 +47,11 @@ fn _no_hardware_mode(temp_uploads: bool) {
     configuration.config_file = Some(temp_config.as_os_str().to_str().unwrap().to_owned());
 
     if temp_uploads {
-        configuration.api.upload_path = temp_dir.path().as_os_str().to_str().unwrap().to_owned();
+        configuration.api.print_upload_dirs = vec![PrintUploadDirectory {
+            label: "Uploads".to_string(),
+            description: None,
+            path: temp_dir.path().as_os_str().to_str().unwrap().to_owned(),
+        }];
     }
 
     Configuration::overwrite_file(&configuration).expect("Unable to save temporary config file");

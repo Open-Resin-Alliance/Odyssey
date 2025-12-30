@@ -25,6 +25,7 @@ pub mod serial_handler;
 pub mod shutdown_handler;
 pub mod sl1;
 pub mod updates;
+pub mod uploads;
 mod wrapped_framebuffer;
 
 pub fn start_odyssey(

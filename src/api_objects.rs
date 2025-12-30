@@ -8,17 +8,21 @@ use std::{
 use optional_struct::optional_struct;
 use poem_openapi::{Enum, Object};
 use serde::{Deserialize, Serialize};
+use tokio::fs;
 
-#[derive(Clone, Debug, Serialize, Deserialize, Enum)]
-pub enum LocationCategory {
-    Local,
-    Usb,
-}
+use crate::{configuration::PrintUploadDirectory, error::OdysseyError};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct FileData {
     pub name: String,
     pub data: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Enum)]
+pub enum FileType {
+    Directory,
+    UnknownFile,
+    SL1,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
@@ -27,22 +31,26 @@ pub struct FileMetadata {
     pub name: String,
     pub last_modified: Option<u64>,
     pub file_size: u64,
-    pub location_category: LocationCategory,
-    pub parent_path: String,
+    pub file_type: FileType,
+    pub upload_directory: PrintUploadDirectory,
 }
 
 impl FileMetadata {
     pub fn from_path(
-        file_path: &str,
-        parent_path: &str,
-        location: LocationCategory,
+        file_path: String,
+        upload_directory: &PrintUploadDirectory,
     ) -> Result<Self, io::Error>
     where
         Self: Sized,
     {
-        let path = Path::new(parent_path).join(file_path);
+        let path = Path::new(&upload_directory.path).join(&file_path);
 
         let metadata = path.metadata()?;
+
+        let file_type = match path.is_dir() {
+            true => FileType::Directory,
+            false => FileType::from_extension(path.extension().and_then(|os_str| os_str.to_str())),
+        };
 
         let modified_time = metadata
             .modified()
@@ -62,19 +70,26 @@ impl FileMetadata {
             ))?;
 
         Ok(FileMetadata {
-            path: file_path.to_owned(),
+            path: file_path,
             name,
             last_modified: modified_time,
             file_size,
-            location_category: location,
-            parent_path: parent_path.to_string(),
+            file_type,
+            upload_directory: upload_directory.clone(),
         })
     }
     pub fn get_full_path(&self) -> PathBuf {
-        Path::new(self.parent_path.as_str()).join(self.path.as_str())
+        Path::new(self.upload_directory.path.as_str()).join(self.path.as_str())
     }
-    pub fn open_file(&self) -> Result<File, io::Error> {
-        File::open(self.get_full_path())
+    pub fn open_file(&self) -> Result<File, OdysseyError> {
+        Ok(File::open(self.get_full_path())?)
+    }
+    pub async fn delete_file(&self) -> Result<(), OdysseyError> {
+        match self.file_type {
+            FileType::Directory => fs::remove_dir(self.get_full_path()).await?,
+            _ => fs::remove_file(self.get_full_path()).await?,
+        }
+        Ok(())
     }
 }
 

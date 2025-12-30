@@ -1,4 +1,6 @@
-use odyssey::configuration::{ApiConfig, Configuration, DisplayConfig, GcodeConfig, PrinterConfig};
+use odyssey::configuration::{
+    ApiConfig, Configuration, DisplayConfig, GcodeConfig, PrintUploadDirectory, PrinterConfig,
+};
 
 pub mod mock_serial_handler;
 
@@ -39,8 +41,11 @@ pub fn default_test_configuration() -> Configuration {
             status_desired: String::from("READY STATUS RESPONSE"),
         },
         api: ApiConfig {
-            upload_path: upload_path(),
-            usb_glob: upload_path(),
+            print_upload_dirs: vec![PrintUploadDirectory {
+                label: "Uploads".to_string(),
+                description: None,
+                path: "uploads".to_string(),
+            }],
             port: 12357,
             enable_docs: Some(true),
         },
