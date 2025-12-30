@@ -1,4 +1,5 @@
 use std::io;
+use std::sync::atomic::AtomicPtr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -26,7 +27,6 @@ pub struct Printer<'a, T: HardwareControl> {
     pub display: PrintDisplay,
     pub hardware_controller: T,
     pub state: PrinterState,
-    print_file: Option<&'a mut dyn PrintFile>,
     pub operation_receiver: mpsc::Receiver<Operation>,
     pub status_sender: broadcast::Sender<PrinterState>,
     pub cancellation_token: CancellationToken,
@@ -66,37 +66,49 @@ impl<T: HardwareControl> Printer<'_, T> {
             operation_receiver,
             status_sender,
             cancellation_token,
-            print_file: None,
         };
 
         printer.start_statemachine().await
     }
 
     pub async fn print_event_loop(&mut self) -> Result<(), OdysseyError> {
-        let file: &mut dyn PrintFile = self
-            .get_print_metadata()
-            .ok_or(OdysseyError::internal_state_error(
-                "Currently printing but no file data available".into(),
-                500,
-            ))?
-            .file_data
-            .try_into()?;
+        let mut file: Arc<RwLock<Box<dyn PrintFile + Send + Sync>>> = Arc::new(RwLock::new(
+            self.get_print_metadata()
+                .ok_or(OdysseyError::internal_state_error(
+                    "Currently printing but no file data available".into(),
+                    500,
+                ))?
+                .file_data
+                .try_into()?,
+        ));
 
-        let layer_height = file.get_layer_height();
+        let layer_height = file.read().await.get_layer_height();
 
         // Get movement values from file, or configured defaults
         let lift = file
+            .read()
+            .await
             .get_lift()
             .unwrap_or((self.config.default_lift * 1000.0).trunc() as u32);
-        let up_speed = file.get_up_speed().unwrap_or(self.config.default_up_speed);
+        let up_speed = file
+            .read()
+            .await
+            .get_up_speed()
+            .unwrap_or(self.config.default_up_speed);
         let down_speed = file
+            .read()
+            .await
             .get_down_speed()
             .unwrap_or(self.config.default_down_speed);
 
         let wait_before_exposure = file
+            .read()
+            .await
             .get_wait_before_exposure()
             .unwrap_or(self.config.default_wait_before_exposure);
         let wait_after_exposure = file
+            .read()
+            .await
             .get_wait_after_exposure()
             .unwrap_or(self.config.default_wait_after_exposure);
 
@@ -104,14 +116,15 @@ impl<T: HardwareControl> Printer<'_, T> {
 
         self.hardware_controller.add_print_variable(
             "total_layers".to_string(),
-            file.get_layer_count().to_string(),
+            file.read().await.get_layer_count().to_string(),
         );
 
         // Execute start_print command, then report state
         self.wrapped_start_print().await;
 
         // Fetch and generate the first frame
-        let mut optional_frame = Frame::from_layer(file.get_layer_data(0).await).await;
+        let layer = file.write().await.get_layer_data(0).await;
+        let mut optional_frame = Frame::from_layer(layer).await;
 
         loop {
             // Run any requested operations that may change the printer state
@@ -133,7 +146,7 @@ impl<T: HardwareControl> Printer<'_, T> {
                                 // Start a task to fetch and generate the next
                                 // frame while we're exposing the current one
                                 let gen_next_frame = tokio::spawn(Frame::from_layer(
-                                    file.get_layer_data(layer + 1).await,
+                                    file.write().await.get_layer_data(layer + 1).await,
                                 ));
 
                                 // Print the current frame by moving into

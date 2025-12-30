@@ -76,6 +76,20 @@ impl<'a> TryInto<&'a mut dyn PrintFile> for FileMetadata {
     }
 }
 
+impl<'a> TryInto<Box<dyn PrintFile + Send + Sync>> for FileMetadata {
+    type Error = OdysseyError;
+
+    fn try_into(self) -> Result<Box<dyn PrintFile + Send + Sync>, Self::Error> {
+        match self.file_type {
+            FileType::SL1 => Ok(Box::new(Sl1::try_from(self)?)),
+            _ => Err(OdysseyError::file_error(
+                "Unsupported print file type".into(),
+                400,
+            )),
+        }
+    }
+}
+
 #[async_trait]
 pub trait PrintFile {
     async fn get_layer_data(&mut self, index: usize) -> Option<Layer>;
