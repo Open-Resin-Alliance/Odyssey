@@ -297,7 +297,7 @@ impl<T: HardwareControl> Printer<'_, T> {
     pub async fn start_print(&mut self, file_data: FileMetadata) -> Result<(), OdysseyError> {
         tracing::info!("Starting Print");
 
-        let print_file: &dyn PrintFile = file_data.try_into()?;
+        let print_file: Box<dyn PrintFile + Send + Sync> = file_data.try_into()?;
         self.enter_printing_state(print_file.get_metadata()).await;
         Ok(())
     }
@@ -355,7 +355,7 @@ impl<T: HardwareControl> Printer<'_, T> {
         layer: usize,
     ) -> Result<(), OdysseyError> {
         tracing::info!("Loading layer {} from {} to display", layer, file_data.name);
-        let file: &mut dyn PrintFile = file_data.try_into()?;
+        let mut file: Box<dyn PrintFile + Send + Sync> = file_data.try_into()?;
 
         let optional_frame = Frame::from_layer(file.get_layer_data(layer).await).await;
 

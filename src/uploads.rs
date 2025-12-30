@@ -125,7 +125,7 @@ impl PrintUploadDirectory {
                             crate::api_objects::FileType::Directory => dirs.push(file_data),
                             crate::api_objects::FileType::SL1 => {
                                 if let Ok(print_file) =
-                                    TryInto::<&dyn PrintFile>::try_into(file_data)
+                                    TryInto::<Box<dyn PrintFile + Send + Sync>>::try_into(file_data)
                                 {
                                     print_files.push(print_file.get_metadata());
                                 }

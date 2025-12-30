@@ -36,7 +36,7 @@ impl FileType {
     }
     pub fn from_extension(extension: Option<&str>) -> FileType {
         match extension.unwrap_or("").to_lowercase().as_str() {
-            ".sl1" => FileType::SL1,
+            "sl1" => FileType::SL1,
             _ => FileType::UnknownFile,
         }
     }
@@ -52,22 +52,6 @@ impl FileType {
                 400,
             )),
         }
-    }
-}
-
-impl<'a> TryInto<&'a dyn PrintFile> for FileMetadata {
-    type Error = OdysseyError;
-
-    fn try_into(self) -> Result<&'a dyn PrintFile, Self::Error> {
-        todo!()
-    }
-}
-
-impl<'a> TryInto<&'a mut dyn PrintFile> for FileMetadata {
-    type Error = OdysseyError;
-
-    fn try_into(self) -> Result<&'a mut dyn PrintFile, Self::Error> {
-        todo!()
     }
 }
 
