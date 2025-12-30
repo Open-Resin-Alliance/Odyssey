@@ -72,17 +72,15 @@ impl FilesApi {
         Query(page_size): Query<Option<usize>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<FilesResponse>> {
-
         let print_upload_dir = configuration.api.get_print_upload_dir(&directory_label)?;
 
-        Ok(print_upload_dir.get_files(subdirectory, page_index, page_size).map(Json)?)
+        Ok(print_upload_dir
+            .get_files(subdirectory, page_index, page_size)
+            .map(Json)?)
     }
 
     #[instrument(ret, skip(configuration))]
-    #[oai(
-        path = "/:filename",
-        method = "get"
-    )]
+    #[oai(path = "/:filename", method = "get")]
     async fn get_file(
         &self,
         Path(filename): Path<String>,
@@ -104,10 +102,7 @@ impl FilesApi {
         Ok(Attachment::new(data).filename(filename))
     }
     #[instrument(ret, skip(configuration))]
-    #[oai(
-        path = "/:filename/metadata",
-        method = "get"
-    )]
+    #[oai(path = "/:filename/metadata", method = "get")]
     async fn get_file_metadata(
         &self,
         Path(filename): Path<String>,
@@ -125,10 +120,7 @@ impl FilesApi {
     }
 
     #[instrument(ret, skip(configuration))]
-    #[oai(
-        path = "/:filename/metadata",
-        method = "patch"
-    )]
+    #[oai(path = "/:filename/metadata", method = "patch")]
     async fn patch_file_metadata(
         &self,
         Path(filename): Path<String>,
@@ -155,10 +147,7 @@ impl FilesApi {
     }
 
     #[instrument(ret, skip(configuration))]
-    #[oai(
-        path = "/:filename/thumbnail",
-        method = "get"
-    )]
+    #[oai(path = "/:filename/thumbnail", method = "get")]
     async fn get_thumbnail(
         &self,
         Path(filename): Path<String>,
@@ -181,10 +170,7 @@ impl FilesApi {
     }
 
     #[instrument(ret, skip(configuration))]
-    #[oai(
-        path = "/:filename",
-        method = "delete"
-    )]
+    #[oai(path = "/:filename", method = "delete")]
     async fn delete_file(
         &self,
         Path(filename): Path<String>,
