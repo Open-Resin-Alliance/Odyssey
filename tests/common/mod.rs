@@ -37,6 +37,7 @@ pub fn default_test_configuration() -> Configuration {
             move_timeout: 60,
             status_check: String::from("STATUS_GCODE"),
             status_desired: String::from("READY STATUS RESPONSE"),
+            manual_move_command: None,
         },
         api: ApiConfig {
             upload_path: upload_path(),

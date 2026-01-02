@@ -238,7 +238,13 @@ impl<T: HardwareControl> Printer<'_, T> {
 
     // Move and update printer state
     async fn wrapped_move(&mut self, z: u32, speed: f64) {
-        if let Ok(physical_state) = self.hardware_controller.move_z(z, speed).await {
+        self._wrapped_move(z, speed, false).await
+    }
+    async fn wrapped_manual_move(&mut self, z: u32, speed: f64) {
+        self._wrapped_move(z, speed, true).await
+    }
+    async fn _wrapped_move(&mut self, z: u32, speed: f64, manual: bool) {
+        if let Ok(physical_state) = self.hardware_controller.move_z(z, speed, manual).await {
             self.update_physical_state(physical_state).await;
         } else {
             self.shutdown().await;
@@ -266,7 +272,8 @@ impl<T: HardwareControl> Printer<'_, T> {
     // Move only if paused
     async fn paused_move(&mut self, z: u32, speed: f64) {
         if self.state.paused.unwrap_or(false) {
-            self.wrapped_move(z.max(self._get_layer_z()), speed).await;
+            self.wrapped_manual_move(z.max(self._get_layer_z()), speed)
+                .await;
         }
     }
 
@@ -564,7 +571,8 @@ impl<T: HardwareControl> Printer<'_, T> {
                 Operation::ManualCommand { command } => self.wrapped_command(command).await,
                 Operation::ManualHome => self.wrapped_home().await,
                 Operation::ManualMove { z } => {
-                    self.wrapped_move(z, self.config.default_up_speed).await
+                    self.wrapped_manual_move(z, self.config.default_up_speed)
+                        .await
                 }
                 Operation::ManualCure { cure } => {
                     if cure {
@@ -641,7 +649,12 @@ pub trait HardwareControl {
     async fn manual_command(&mut self, command: String) -> Result<PhysicalState, OdysseyError>;
     async fn start_print(&mut self) -> Result<PhysicalState, OdysseyError>;
     async fn end_print(&mut self) -> Result<PhysicalState, OdysseyError>;
-    async fn move_z(&mut self, z: u32, speed: f64) -> Result<PhysicalState, OdysseyError>;
+    async fn move_z(
+        &mut self,
+        z: u32,
+        speed: f64,
+        manual: bool,
+    ) -> Result<PhysicalState, OdysseyError>;
     async fn start_layer(&mut self, layer: usize) -> Result<PhysicalState, OdysseyError>;
     async fn start_curing(&mut self) -> Result<PhysicalState, OdysseyError>;
     async fn stop_curing(&mut self) -> Result<PhysicalState, OdysseyError>;
