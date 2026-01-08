@@ -52,20 +52,20 @@ impl PrintDisplay {
         let mut chunk_bytes: Vec<u8> = Vec::new();
         let mut shift = chunk_size - pixel_format.left_pad_bits;
         for i in 0..pixels.len() {
-            print!("{}\n", i);
+            println!("{}", i);
             shift -= pixel_format.bit_depth[i];
 
             // Truncate the pixel data to the displays bit depth, then shift it into place in the raw chunk bits
             raw_chunk |= ((pixels[i] as u64) >> (bit_depth - pixel_format.bit_depth[i])) << shift
         }
 
-        print!("{:#032b}\n", raw_chunk);
+        println!("{:#032b}", raw_chunk);
 
         for i in 0..(chunk_size / 8) {
             // pull the raw chunk back apart into bytes, for push into the new buffer
             let byte = ((raw_chunk >> (8 * i)) & 0xFF) as u8;
             chunk_bytes.push(byte);
-            print!("{}\n", i)
+            println!("{}", i)
         }
 
         chunk_bytes
@@ -82,7 +82,7 @@ impl PrintDisplay {
             + self.config.pixel_format.right_pad_bits;
         tracing::debug!("Re-encoding frame with bit-depth {} into {} pixels in {} bits, with the following bit layout: {:?}", bit_depth, self.config.pixel_format.bit_depth.len(), chunk_size, self.config.pixel_format.bit_depth);
 
-        return buffer
+        buffer
             .chunks_exact(self.config.pixel_format.bit_depth.len())
             .flat_map(|pixel_group| {
                 Self::re_encode_pixel_group(
@@ -92,7 +92,7 @@ impl PrintDisplay {
                     chunk_size,
                 )
             })
-            .collect();
+            .collect()
 
         /*.for_each(|pixel_chunk| {
 
