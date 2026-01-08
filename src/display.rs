@@ -52,20 +52,20 @@ impl PrintDisplay {
         let mut chunk_bytes: Vec<u8> = Vec::new();
         let mut shift = chunk_size - pixel_format.left_pad_bits;
         for i in 0..pixels.len() {
-            print!("{}\n",i);
+            print!("{}\n", i);
             shift -= pixel_format.bit_depth[i];
 
             // Truncate the pixel data to the displays bit depth, then shift it into place in the raw chunk bits
             raw_chunk |= ((pixels[i] as u64) >> (bit_depth - pixel_format.bit_depth[i])) << shift
         }
 
-        print!("{:#032b}\n",raw_chunk);
+        print!("{:#032b}\n", raw_chunk);
 
         for i in 0..(chunk_size / 8) {
             // pull the raw chunk back apart into bytes, for push into the new buffer
             let byte = ((raw_chunk >> (8 * i)) & 0xFF) as u8;
             chunk_bytes.push(byte);
-            print!("{}\n",i)
+            print!("{}\n", i)
         }
 
         chunk_bytes
@@ -191,7 +191,7 @@ mod tests {
             &pixel_format,
             &image_buffer,
             image_bit_depth,
-            chunk_size
+            chunk_size,
         );
 
         assert_eq!(result, expected_result);
@@ -219,7 +219,7 @@ mod tests {
             &pixel_format,
             &image_buffer,
             image_bit_depth,
-            chunk_size
+            chunk_size,
         );
 
         assert_eq!(result, expected_result);
