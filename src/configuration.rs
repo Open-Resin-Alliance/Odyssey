@@ -18,13 +18,22 @@ pub struct PrinterConfig {
     pub pause_lift: f64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Object)]
+pub struct PixelFormat {
+    pub bit_depth: Vec<u8>,
+    #[serde(default)]
+    pub left_pad_bits: u8,
+    #[serde(default)]
+    pub right_pad_bits: u8,
+}
+
 #[optional_struct(UpdateDisplayConfig)]
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct DisplayConfig {
     pub frame_buffer: String,
-    pub bit_depth: Vec<u8>,
     pub screen_width: u32,
     pub screen_height: u32,
+    pub pixel_format: PixelFormat,
 }
 
 #[optional_struct(UpdateGcodeConfig)]
