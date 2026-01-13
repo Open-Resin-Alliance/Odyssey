@@ -53,7 +53,7 @@ def split_to_chunks(pixels, pixel_bit_len, pixels_per_chunk, chunk_bit_len, pad_
             out.extend(chunk.to_bytes(chunk_bytes,"big"))
             chunk = 0b0
     return out
-    
+
 def pattern_line_bytes(pixel_vals, pixel_bit_len, total_pixel_count, pixels_per_chunk, chunk_bit_len, pad_end=True, pad_ones=True):
     assert total_pixel_count%len(pixel_vals)==0, f"Cannot divide {total_pixel_count}pixels into {len(pixel_vals)} values: {pixel_vals}"
     band_pixel_count = int(total_pixel_count/len(pixel_vals))
@@ -84,19 +84,20 @@ while True:
     write_line(frame_buffer, pattern_line_bytes(pixel_vals, bit_depth,mono_pixel_width,8,32,True,True),height)
     print(f"{[bin(i) for i in pixel_vals]} padded with 0s on the right")
     write_line(frame_buffer, pattern_line_bytes(pixel_vals, bit_depth,mono_pixel_width,8,32,True,False),height)
-    
+
     print(f"{[bin(i) for i in pixel_vals]} padded with 1s on the left")
     write_line(frame_buffer, pattern_line_bytes(pixel_vals, bit_depth,mono_pixel_width,8,32,False,True),height)
-    
+
     print(f"{[bin(i) for i in pixel_vals]} padded with 0s on the left")
     write_line(frame_buffer, pattern_line_bytes(pixel_vals, bit_depth,mono_pixel_width,8,32,False,False),height)
 """
 pattern = pattern_line_bytes([0,2**3-1,]*16,bit_depth, mono_pixel_width, 8, 32)
-write_line_shifting(frame_buffer,pattern, height,4,delay_ms=0.5)
 
-"""
-while True:
-    write_line(frame_buffer,pattern, 1)
-    pattern.insert(0,pattern.pop())
-"""
+#while True:
+write_line_shifting(frame_buffer,pattern, height,4,delay_ms=0.5)
+    #pattern.insert(0,pattern.pop())
+    #pattern.insert(0,pattern.pop())
+    #pattern.insert(0,pattern.pop())
+    #pattern.insert(0,pattern.pop())
+
 
