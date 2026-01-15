@@ -5,12 +5,7 @@ use poem_openapi::{param::Query, OpenApi};
 use tokio::sync::mpsc;
 use tracing::instrument;
 
-use crate::{
-    api::Api,
-    api_objects::{DisplayTest, LocationCategory},
-    configuration::Configuration,
-    printer::Operation,
-};
+use crate::{api::Api, api_objects::DisplayTest, configuration::Configuration, printer::Operation};
 
 #[derive(Debug)]
 pub struct ManualApi;
@@ -82,15 +77,16 @@ impl ManualApi {
     #[oai(path = "/display_layer", method = "post")]
     async fn manual_display_layer(
         &self,
-        Query(file_path): Query<String>,
-        Query(location): Query<Option<LocationCategory>>,
+        Query(directory_label): Query<Option<String>>,
+        Query(subdirectory): Query<Option<String>>,
+        Query(filename): Query<String>,
         Query(layer): Query<usize>,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<()> {
-        let location = location.unwrap_or(LocationCategory::Local);
+        let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
 
-        let file_data = Api::_get_filedata(&file_path, location, &configuration.api)?;
+        let file_data = print_upload_directory.get_file_from_subdir(&filename, subdirectory)?;
 
         Ok(Api::send_statemachine_operation(
             operation_sender,

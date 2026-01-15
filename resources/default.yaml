@@ -50,7 +50,7 @@ gcode:
 # This section holds fields pertaining to the Odyseey API, such as the port number
 # and where to store uploaded .sl1 files
 api:
-  upload_path: /home/pi/printer_data/gcodes
-  # glob pattern for finding files in mounted USB devices, if present
-  usb_glob: /media/usb*/*.sl1
+  print_upload_dirs:
+  - label: Uploads
+    path: /home/pi/printer_data/gcodes
   port: 12357
