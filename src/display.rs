@@ -125,33 +125,38 @@ impl PrintDisplay {
         vec![0x00; (self.config.screen_width * self.config.screen_height) as usize]
     }
 
-    fn display_test_diagonal(&mut self, width:u32) -> Vec<u8> {
-        let val_from_pixel_index =
-            |index|  {
-                let row = index / self.config.screen_width;
-                match ((index+row)/width)%2==0 {
-                    true => 0x00,
-                    false => 0xFF,
-                }
-            };
-        
+    fn display_test_diagonal(&mut self, width: u32) -> Vec<u8> {
+        let val_from_pixel_index = |index| {
+            let row = index / self.config.screen_width;
+            match ((index + row) / width) % 2 == 0 {
+                true => 0x00,
+                false => 0xFF,
+            }
+        };
+
         let pixel_count = self.config.screen_width * self.config.screen_height;
         (0..pixel_count).map(val_from_pixel_index).collect()
     }
 
     fn display_test_value_range(&mut self) -> Vec<u8> {
-        let min_bit_depth = self.config.pixel_format.bit_depth.iter().min().cloned().unwrap_or(8);
-        let max_val = ((0b1<<min_bit_depth)-1).into();
+        let min_bit_depth = self
+            .config
+            .pixel_format
+            .bit_depth
+            .iter()
+            .min()
+            .cloned()
+            .unwrap_or(8);
+        let max_val = ((0b1 << min_bit_depth) - 1).into();
         let values: Vec<u8> = (0x00..max_val).collect();
         let block_width = self.config.screen_width / (max_val as u32);
 
-        let val_from_pixel_index =
-            |index|  {
-                let col = index%self.config.screen_width;
-                let val = values[(col / block_width) as usize];
-                tracing::info!("index {index} col {col} val {:X}|{:b}",val,val);
-                val
-            };
+        let val_from_pixel_index = |index| {
+            let col = index % self.config.screen_width;
+            let val = values[(col / block_width) as usize];
+            tracing::info!("index {index} col {col} val {:X}|{:b}", val, val);
+            val
+        };
 
         let pixel_count = self.config.screen_width * self.config.screen_height;
         (0..pixel_count).map(val_from_pixel_index).collect()

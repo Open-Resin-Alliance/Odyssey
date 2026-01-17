@@ -23,19 +23,34 @@ struct NoHardwareSettings {
 #[test]
 #[ignore]
 fn no_hardware_tmp() {
-    _no_hardware_mode(NoHardwareSettings { temp_uploads: true,..Default::default() });
+    _no_hardware_mode(NoHardwareSettings {
+        temp_uploads: true,
+        ..Default::default()
+    });
 }
 
 #[test]
 #[ignore]
 fn emulated_fb() {
-    _no_hardware_mode(NoHardwareSettings { temp_uploads: true, screen_width: Some(192), screen_height: Some(108), pixel_format: Some(PixelFormat { bit_depth: vec!(8,), left_pad_bits: 0, right_pad_bits: 0 }) });
+    _no_hardware_mode(NoHardwareSettings {
+        temp_uploads: true,
+        screen_width: Some(192),
+        screen_height: Some(108),
+        pixel_format: Some(PixelFormat {
+            bit_depth: vec![8],
+            left_pad_bits: 0,
+            right_pad_bits: 0,
+        }),
+    });
 }
 
 #[test]
 #[ignore]
 fn no_hardware_mode() {
-    _no_hardware_mode(NoHardwareSettings { temp_uploads: false,..Default::default() });
+    _no_hardware_mode(NoHardwareSettings {
+        temp_uploads: false,
+        ..Default::default()
+    });
 }
 
 /**
@@ -46,7 +61,10 @@ fn _no_hardware_mode(settings: NoHardwareSettings) {
         .with_max_level(Level::TRACE)
         .init();
 
-    let temp_dir = tempfile::Builder::new().prefix("odysseyTest").tempdir().expect("Unable to create temp directory for test");
+    let temp_dir = tempfile::Builder::new()
+        .prefix("odysseyTest")
+        .tempdir()
+        .expect("Unable to create temp directory for test");
 
     let temp_config = temp_dir.path().join("mockConfig.yaml");
     let temp_fb = temp_dir.path().join("mockFb");
