@@ -1,3 +1,5 @@
+use std::{array::from_fn, ops::Range};
+
 use framebuffer::Framebuffer;
 use png::Decoder;
 
@@ -52,20 +54,18 @@ impl PrintDisplay {
         let mut chunk_bytes: Vec<u8> = Vec::new();
         let mut shift = chunk_size - pixel_format.left_pad_bits;
         for i in 0..pixels.len() {
-            println!("{}", i);
             shift -= pixel_format.bit_depth[i];
 
             // Truncate the pixel data to the displays bit depth, then shift it into place in the raw chunk bits
             raw_chunk |= ((pixels[i] as u64) >> (bit_depth - pixel_format.bit_depth[i])) << shift
         }
 
-        println!("{:#032b}", raw_chunk);
+        //println!("{:#032b}", raw_chunk);
 
         for i in 0..(chunk_size / 8) {
             // pull the raw chunk back apart into bytes, for push into the new buffer
             let byte = ((raw_chunk >> (8 * i)) & 0xFF) as u8;
             chunk_bytes.push(byte);
-            println!("{}", i)
         }
 
         chunk_bytes
@@ -93,32 +93,6 @@ impl PrintDisplay {
                 )
             })
             .collect()
-
-        /*.for_each(|pixel_chunk| {
-
-
-                // raw binary chunk of pixels, to be broken into bytes and repacked in the Vector later
-                let mut raw_chunk = 0b0;
-                let mut pos_shift = chunk_size-self.config.pad_left;
-                for i in 0..pixels_per_chunk {
-                    let depth_difference = bit_depth - self.config.bit_depth[i];
-                    pos_shift -= self.config.bit_depth[i];
-
-                    // Truncate the pixel data to the display's bit depth, then shift it into place in the raw chunk
-                    let shifted_pixel: u64 =
-                        ((pixel_chunk[i] as u64) >> depth_difference) << (pos_shift);
-                    raw_chunk |= shifted_pixel;
-                }
-
-                for i in 0..(chunk_size / 8) {
-                    // pull the raw chunk back apart into bytes, for push into the new buffer
-                    let byte = ((raw_chunk >> (8 * i)) & 0xFF) as u8;
-                    new_buffer.push(byte);
-                }
-
-            });
-
-        new_buffer*/
     }
 
     pub fn display_frame(&mut self, frame: Frame) {
@@ -134,7 +108,10 @@ impl PrintDisplay {
         let test_bytes = match test {
             DisplayTest::White => self.display_test_white(),
             DisplayTest::Blank => self.display_test_blank(),
-            _ => self.display_test_blank(),
+            DisplayTest::Diagonal => self.display_test_diagonal(16),
+            DisplayTest::ValueRange => self.display_test_value_range(),
+            DisplayTest::Grid => self.display_test_blank(),
+            DisplayTest::Dimensions => self.display_test_blank(),
         };
 
         self.display_bytes(test_bytes, 8);
@@ -146,6 +123,38 @@ impl PrintDisplay {
 
     fn display_test_blank(&mut self) -> Vec<u8> {
         vec![0x00; (self.config.screen_width * self.config.screen_height) as usize]
+    }
+
+    fn display_test_diagonal(&mut self, width:u32) -> Vec<u8> {
+        let val_from_pixel_index =
+            |index|  {
+                let row = index / self.config.screen_width;
+                match ((index+row)/width)%2==0 {
+                    true => 0x00,
+                    false => 0xFF,
+                }
+            };
+        
+        let pixel_count = self.config.screen_width * self.config.screen_height;
+        (0..pixel_count).map(val_from_pixel_index).collect()
+    }
+
+    fn display_test_value_range(&mut self) -> Vec<u8> {
+        let min_bit_depth = self.config.pixel_format.bit_depth.iter().min().cloned().unwrap_or(8);
+        let max_val = ((0b1<<min_bit_depth)-1).into();
+        let values: Vec<u8> = (0x00..max_val).collect();
+        let block_width = self.config.screen_width / (max_val as u32);
+
+        let val_from_pixel_index =
+            |index|  {
+                let col = index%self.config.screen_width;
+                let val = values[(col / block_width) as usize];
+                tracing::info!("index {index} col {col} val {:X}|{:b}",val,val);
+                val
+            };
+
+        let pixel_count = self.config.screen_width * self.config.screen_height;
+        (0..pixel_count).map(val_from_pixel_index).collect()
     }
 
     pub fn new(config: &DisplayConfig) -> PrintDisplay {
