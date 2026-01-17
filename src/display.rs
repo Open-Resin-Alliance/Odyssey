@@ -1,4 +1,3 @@
-use std::{array::from_fn, ops::Range};
 
 use framebuffer::Framebuffer;
 use png::Decoder;
@@ -147,7 +146,7 @@ impl PrintDisplay {
             .min()
             .cloned()
             .unwrap_or(8);
-        let max_val = ((0b1 << min_bit_depth) - 1).into();
+        let max_val = ((0b1 << min_bit_depth) - 1);
         let values: Vec<u8> = (0x00..max_val).collect();
         let block_width = self.config.screen_width / (max_val as u32);
 
