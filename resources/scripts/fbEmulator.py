@@ -2,10 +2,10 @@
 import glob
 import pygame
 
-fifo_path = glob.glob("/tmp/odysseyTest*")[0]
+fifo_path = glob.glob("/tmp/odysseyTest*/mockFb")[0]
 mode = 0o600
 
-real_bit_depth=[5,6,5]
+real_bit_depth=[8]
 
 bytes_per_pixelgroup=int(sum(real_bit_depth)/8)
 
@@ -16,7 +16,7 @@ fake_bit_depth=8
 #zoom_ratio=1
 
 sliced_x, sliced_y = (192,108)
-zoom_ratio=1
+zoom_ratio=5
 
 
 print(f"Rendering a screen {sliced_x*zoom_ratio}x{sliced_y*zoom_ratio}")
