@@ -146,13 +146,12 @@ impl PrintDisplay {
             .min()
             .cloned()
             .unwrap_or(8);
-        let max_val = ((0b1 << min_bit_depth) - 1);
-        let values: Vec<u8> = (0x00..max_val).collect();
+        let max_val = (2_u32.pow(min_bit_depth as u32) -1) as u8;
         let block_width = self.config.screen_width / (max_val as u32);
 
         let val_from_pixel_index = |index| {
             let col = index % self.config.screen_width;
-            let val = values[(col / block_width) as usize];
+            let val = (col / block_width) as u8;
             tracing::info!("index {index} col {col} val {:X}|{:b}", val, val);
             val
         };
