@@ -15,7 +15,7 @@ use poem::{
     EndpointExt, Result, Route, Server,
 };
 use poem_openapi::{
-    payload::{EventStream, Json},
+    payload::{EventStream, Json, PlainText},
     types::ToJSON,
     OpenApi, OpenApiService,
 };
@@ -36,6 +36,7 @@ use crate::{
     printer::Operation,
     printfile::PrintFile,
     sl1::Sl1,
+    VERSION,
 };
 
 #[derive(Debug)]
@@ -45,8 +46,14 @@ struct Api;
 impl Api {
     #[instrument(ret, skip(operation_sender))]
     #[oai(path = "/shutdown", method = "post")]
-    async fn shutdown(&self, Data(operation_sender): Data<&mpsc::Sender<Operation>>) -> Result<()> {
-        Ok(Self::send_statemachine_operation(operation_sender, Operation::Shutdown {}).await?)
+    async fn shutdown(
+        &self,
+        Data(operation_sender): Data<&mpsc::Sender<Operation>>,
+        Data(cancellation_token): Data<&CancellationToken>,
+    ) -> Result<()> {
+        Self::send_statemachine_operation(operation_sender, Operation::Shutdown {}).await?;
+        cancellation_token.cancel();
+        Ok(())
     }
 
     async fn send_statemachine_operation(
@@ -57,6 +64,12 @@ impl Api {
             .send(operation)
             .await
             .map_err(OdysseyError::from)
+    }
+
+    #[instrument(ret)]
+    #[oai(path = "/version", method = "get")]
+    async fn version(&self) -> PlainText<String> {
+        PlainText(VERSION.to_string())
     }
 
     #[instrument(ret, skip(state_ref))]
@@ -180,11 +193,14 @@ pub async fn start_api(
         app = app.nest("/docs", ui);
     }
 
+    let api_shutdown_trigger = cancellation_token.clone();
+
     let app = app
         .data(operation_sender)
         .data(Arc::new(state_receiver))
         .data(state_ref.clone())
         .data(full_config)
+        .data(api_shutdown_trigger)
         .with(Cors::new());
 
     match Server::new(TcpListener::bind(addr))

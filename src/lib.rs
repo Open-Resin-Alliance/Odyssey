@@ -27,6 +27,8 @@ pub mod sl1;
 pub mod updates;
 mod wrapped_framebuffer;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub fn start_odyssey(
     runtime: Runtime,
     configuration: Arc<Configuration>,
