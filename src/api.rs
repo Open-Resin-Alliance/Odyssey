@@ -29,13 +29,15 @@ use tracing::instrument;
 
 use crate::{
     api_objects::{
-        FileMetadata, LocationCategory, PhysicalState, PrintMetadata, PrinterState, PrinterStatus,
+        ExecutableVersion, FileMetadata, LocationCategory, PhysicalState, PrintMetadata,
+        PrinterState, PrinterStatus,
     },
     configuration::{ApiConfig, Configuration},
     error::OdysseyError,
     printer::Operation,
     printfile::PrintFile,
     sl1::Sl1,
+    COMMIT_HASH, COMPILE_TARGET, VERSION,
 };
 
 #[derive(Debug)]
@@ -45,8 +47,14 @@ struct Api;
 impl Api {
     #[instrument(ret, skip(operation_sender))]
     #[oai(path = "/shutdown", method = "post")]
-    async fn shutdown(&self, Data(operation_sender): Data<&mpsc::Sender<Operation>>) -> Result<()> {
-        Ok(Self::send_statemachine_operation(operation_sender, Operation::Shutdown {}).await?)
+    async fn shutdown(
+        &self,
+        Data(operation_sender): Data<&mpsc::Sender<Operation>>,
+        Data(cancellation_token): Data<&CancellationToken>,
+    ) -> Result<()> {
+        Self::send_statemachine_operation(operation_sender, Operation::Shutdown {}).await?;
+        cancellation_token.cancel();
+        Ok(())
     }
 
     async fn send_statemachine_operation(
@@ -57,6 +65,16 @@ impl Api {
             .send(operation)
             .await
             .map_err(OdysseyError::from)
+    }
+
+    #[instrument(ret)]
+    #[oai(path = "/version", method = "get")]
+    async fn version(&self) -> Json<ExecutableVersion> {
+        Json(ExecutableVersion {
+            version: VERSION.to_string(),
+            compile_target: COMPILE_TARGET.to_string(),
+            commit_hash: COMMIT_HASH.to_string(),
+        })
     }
 
     #[instrument(ret, skip(state_ref))]
@@ -180,11 +198,14 @@ pub async fn start_api(
         app = app.nest("/docs", ui);
     }
 
+    let api_shutdown_trigger = cancellation_token.clone();
+
     let app = app
         .data(operation_sender)
         .data(Arc::new(state_receiver))
         .data(state_ref.clone())
         .data(full_config)
+        .data(api_shutdown_trigger)
         .with(Cors::new());
 
     match Server::new(TcpListener::bind(addr))

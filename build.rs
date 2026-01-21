@@ -17,6 +17,11 @@ fn main() {
     }
     println!("cargo:rerun-if-env-changed=ODYSSEY_RELEASE_VERSION");
 
+    println!(
+        "cargo:rustc-env=CARGO_COMPILE_TARGET={}",
+        std::env::var("TARGET").unwrap()
+    );
+
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let cargo_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
     fs::copy(

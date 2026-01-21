@@ -141,3 +141,10 @@ pub struct ReleaseVersion {
     pub date: String,
     pub body: Option<String>,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize, Object)]
+pub struct ExecutableVersion {
+    pub version: String,
+    pub compile_target: String,
+    pub commit_hash: String,
+}
