@@ -15,7 +15,7 @@ use poem::{
     EndpointExt, Result, Route, Server,
 };
 use poem_openapi::{
-    payload::{EventStream, Json, PlainText},
+    payload::{EventStream, Json},
     types::ToJSON,
     OpenApi, OpenApiService,
 };
@@ -29,14 +29,15 @@ use tracing::instrument;
 
 use crate::{
     api_objects::{
-        FileMetadata, LocationCategory, PhysicalState, PrintMetadata, PrinterState, PrinterStatus,
+        ExecutableVersion, FileMetadata, LocationCategory, PhysicalState, PrintMetadata,
+        PrinterState, PrinterStatus,
     },
     configuration::{ApiConfig, Configuration},
     error::OdysseyError,
     printer::Operation,
     printfile::PrintFile,
     sl1::Sl1,
-    VERSION,
+    COMMIT_HASH, COMPILE_TARGET, VERSION,
 };
 
 #[derive(Debug)]
@@ -68,8 +69,12 @@ impl Api {
 
     #[instrument(ret)]
     #[oai(path = "/version", method = "get")]
-    async fn version(&self) -> PlainText<String> {
-        PlainText(VERSION.to_string())
+    async fn version(&self) -> Json<ExecutableVersion> {
+        Json(ExecutableVersion {
+            version: VERSION.to_string(),
+            compile_target: COMPILE_TARGET.to_string(),
+            commit_hash: COMMIT_HASH.to_string(),
+        })
     }
 
     #[instrument(ret, skip(state_ref))]
