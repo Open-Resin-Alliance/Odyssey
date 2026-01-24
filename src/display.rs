@@ -1,3 +1,5 @@
+use std::cmp::max;
+
 use framebuffer::Framebuffer;
 use png::Decoder;
 
@@ -94,12 +96,16 @@ impl PrintDisplay {
     }
 
     pub fn display_frame(&mut self, frame: Frame) {
-        self.display_bytes(frame.buffer, frame.bit_depth);
+        self.display_rencoded_bytes(frame.buffer, frame.bit_depth);
     }
 
-    fn display_bytes(&mut self, buffer: Vec<u8>, bit_depth: u8) {
+    fn display_rencoded_bytes(&mut self, buffer: Vec<u8>, bit_depth: u8) {
+        self.display_bytes(&self.re_encode(buffer, bit_depth));
+    }
+    fn display_bytes(&mut self, buffer: &[u8]) {
+        
         self.frame_buffer
-            .write_frame(&self.re_encode(buffer, bit_depth));
+            .write_frame(buffer);
     }
 
     pub fn display_test(&mut self, test: DisplayTest) {
@@ -112,10 +118,11 @@ impl PrintDisplay {
             DisplayTest::Dimensions => self.display_test_blank(),
         };
 
-        self.display_bytes(test_bytes, 8);
+        self.display_rencoded_bytes(test_bytes, 8);
     }
 
     fn display_test_white(&mut self) -> Vec<u8> {
+        
         vec![0xFF; (self.config.screen_width * self.config.screen_height) as usize]
     }
 
@@ -146,7 +153,7 @@ impl PrintDisplay {
             .cloned()
             .unwrap_or(8);
         let max_val = (2_u32.pow(min_bit_depth as u32) - 1) as u8;
-        let block_width = self.config.screen_width / (max_val as u32);
+        let block_width = max(self.config.screen_width / (max_val as u32),1);
 
         let val_from_pixel_index = |index| {
             let col = index % self.config.screen_width;
