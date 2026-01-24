@@ -7,6 +7,7 @@ use crate::{
     serial_handler::SerialHandler,
     shutdown_handler::ShutdownHandler,
 };
+use git_version::git_version;
 use std::sync::Arc;
 use tokio::{
     runtime::Runtime,
@@ -26,6 +27,10 @@ pub mod shutdown_handler;
 pub mod sl1;
 pub mod updates;
 mod wrapped_framebuffer;
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const COMPILE_TARGET: &str = env!("CARGO_COMPILE_TARGET");
+const COMMIT_HASH: &str = git_version!(fallback = "unknown");
 
 pub fn start_odyssey(
     runtime: Runtime,
