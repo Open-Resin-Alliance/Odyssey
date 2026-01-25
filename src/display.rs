@@ -155,7 +155,9 @@ impl PrintDisplay {
         let val_from_pixel_index = |index| {
             let col = index % self.config.screen_width;
             let val = (col / block_width) as u8;
-            tracing::info!("index {index} col {col} val {:X}|{:b}", val, val);
+            if index < self.config.screen_width {
+                tracing::info!("index {index} col {col} val {:X}|{:b}", val, val);
+            }
             val
         };
 
