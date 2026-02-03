@@ -34,7 +34,8 @@ fn main() {
         if ty.is_dir() {
             continue;
         } else {
-            fs::copy(entry.path(), config_dest.join(entry.file_name())).expect("Expect config file to be copies");
+            fs::copy(entry.path(), config_dest.join(entry.file_name()))
+                .expect("Expect config file to be copies");
         }
     }
 
