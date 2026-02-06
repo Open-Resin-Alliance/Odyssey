@@ -27,6 +27,33 @@ pub struct DisplayConfig {
     pub screen_height: u32,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, Object, PartialEq)]
+pub struct SensorHardwareConfig {
+    pub poll_command: String,
+    pub poll_ms: u32,
+    pub match_pattern: Option<String>
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Object, PartialEq)]
+pub struct SensorUDSConfig {
+    pub socket_path: String,
+    pub poll_comand: Option<String>,
+    pub poll_ms: Option<u32>,
+    pub match_pattern: Option<String>
+}
+
+#[optional_struct(UpdateSensorConfig)]
+#[derive(Clone, Debug, Serialize, Deserialize, Object, PartialEq)]
+pub struct SensorConfig {
+    pub name: String,
+    pub variable: String,
+
+    pub hardware: Option<SensorHardwareConfig>,
+    pub uds: Option<SensorUDSConfig>,
+}
+
+
+
 #[optional_struct(UpdateGcodeConfig)]
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct GcodeConfig {
@@ -84,6 +111,8 @@ pub struct Configuration {
     #[optional_wrap]
     #[optional_rename(UpdateDisplayConfig)]
     pub display: DisplayConfig,
+
+    pub sensors: Vec<SensorConfig>,
 
     #[serde(skip_serializing)]
     pub config_file: Option<String>,

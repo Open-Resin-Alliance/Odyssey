@@ -51,6 +51,7 @@ pub fn default_test_configuration() -> Configuration {
             screen_width: 1920,
             screen_height: 1080,
         },
+        sensors: Vec::new()
     }
 }
 
