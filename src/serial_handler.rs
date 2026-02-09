@@ -1,10 +1,10 @@
 use async_trait::async_trait;
-use serialport::TTYPort;
 use std::io::{self, BufRead, BufReader, Write};
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::time::{interval, timeout, Duration};
 use tokio_util::sync::CancellationToken;
+use tokio_serial::SerialPort;
 
 use crate::error::OdysseyError;
 
@@ -144,12 +144,12 @@ pub trait SerialHandler {
 }
 
 pub struct TTYPortHandler {
-    serial_port: TTYPort,
+    serial_port: Box<dyn SerialPort>,
     internal_comms: InternalCommsHandler,
 }
 
 impl TTYPortHandler {
-    pub fn new(serial_port: TTYPort) -> TTYPortHandler {
+    pub fn new(serial_port: Box<dyn SerialPort>) -> TTYPortHandler {
         TTYPortHandler {
             serial_port,
             internal_comms: InternalCommsHandler::new(),
@@ -187,7 +187,7 @@ impl SerialHandler for TTYPortHandler {
     ) -> Result<(), OdysseyError> {
         let mut buf_reader = BufReader::new(
             self.serial_port
-                .try_clone_native()
+                .try_clone()
                 .map_err(|err| OdysseyError::hardware_error(Box::new(err), 0))?,
         );
 
@@ -227,13 +227,13 @@ impl SerialHandler for TTYPortHandler {
 }
 
 pub async fn run_listener(
-    serial_port: TTYPort,
+    serial_port: Box<dyn SerialPort>,
     sender: Sender<String>,
     cancellation_token: CancellationToken,
 ) {
     let mut buf_reader = BufReader::new(
         serial_port
-            .try_clone_native()
+            .try_clone()
             .expect("Unable to clone serial port"),
     );
     let mut interval = interval(Duration::from_millis(100));
@@ -266,7 +266,7 @@ pub async fn run_listener(
 }
 
 pub async fn run_writer(
-    mut serial_port: TTYPort,
+    mut serial_port: Box<dyn SerialPort>,
     mut receiver: Receiver<String>,
     cancellation_token: CancellationToken,
 ) {
@@ -280,7 +280,7 @@ pub async fn run_writer(
         interval.tick().await;
 
         if let Ok(message) = receiver.recv().await {
-            while let Err(e) = send_serial(&mut serial_port, message.clone()).await {
+            while let Err(e) = send_serial( &mut serial_port, message.clone()).await {
                 match e.kind() {
                     io::ErrorKind::Interrupted => {
                         continue;
@@ -292,7 +292,7 @@ pub async fn run_writer(
     }
 }
 
-async fn send_serial(serial_port: &mut TTYPort, message: String) -> io::Result<usize> {
+async fn send_serial(serial_port: &mut Box<dyn SerialPort>, message: String) -> io::Result<usize> {
     let n = serial_port.write(message.as_bytes())?;
 
     serial_port

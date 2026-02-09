@@ -2,7 +2,7 @@ use std::{str::FromStr, sync::Arc};
 
 use clap::Parser;
 
-use serialport::{ClearBuffer, SerialPort};
+use serialport::{ClearBuffer};
 use tokio::runtime::{Builder, Runtime};
 
 use odyssey::{configuration::Configuration, serial_handler::TTYPortHandler};
@@ -38,12 +38,9 @@ fn main() {
         &configuration.printer.serial,
         configuration.printer.baudrate,
     )
-    .open_native()
+    .open()
     .expect("Unable to open serial port");
 
-    serial
-        .set_exclusive(false)
-        .expect("Unable to set serial port exclusivity(false)");
     serial
         .clear(ClearBuffer::All)
         .expect("Unable to clear serialport buffers");
