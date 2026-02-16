@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use crate::api_objects::DisplayTest;
@@ -26,7 +27,7 @@ pub struct Printer<'a, T: HardwareControl> {
     pub hardware_controller: T,
     pub state: PrinterState,
     pub operation_receiver: mpsc::Receiver<Operation>,
-    pub status_sender: broadcast::Sender<PrinterState>,
+    pub status_sender: watch::Sender<PrinterState>,
     pub cancellation_token: CancellationToken,
 }
 
@@ -36,7 +37,7 @@ impl<T: HardwareControl> Printer<'_, T> {
         display: PrintDisplay,
         mut hardware_controller: T,
         operation_receiver: mpsc::Receiver<Operation>,
-        status_sender: broadcast::Sender<PrinterState>,
+        status_sender: watch::Sender<PrinterState>,
         cancellation_token: CancellationToken,
     ) {
         hardware_controller

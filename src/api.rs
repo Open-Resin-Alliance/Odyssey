@@ -19,11 +19,8 @@ use poem_openapi::{
     types::ToJSON,
     OpenApi, OpenApiService,
 };
-use tokio::{
-    sync::{broadcast, mpsc, RwLock},
-    time::interval,
-};
-use tokio_stream::wrappers::BroadcastStream;
+use tokio::sync::{mpsc, watch, RwLock};
+use tokio_stream::wrappers::WatchStream;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
@@ -77,37 +74,30 @@ impl Api {
         })
     }
 
-    #[instrument(ret, skip(state_ref))]
+    #[instrument(ret, skip(state_receiver))]
     #[oai(path = "/status", method = "get")]
     async fn get_status(
         &self,
-        Data(state_ref): Data<&Arc<RwLock<PrinterState>>>,
+        Data(state_receiver): Data<&watch::Receiver<PrinterState>>,
     ) -> Json<PrinterState> {
-        Json(state_ref.read().await.clone())
+        Json(state_receiver.borrow().clone())
     }
 
     #[instrument(skip(state_receiver))]
     #[oai(path = "/status/stream", method = "get")]
     async fn status_stream(
         &self,
-        Data(state_receiver): Data<&Arc<broadcast::Receiver<PrinterState>>>,
-    ) -> EventStream<BoxStream<'static, Option<PrinterState>>> {
+        Data(state_receiver): Data<&watch::Receiver<PrinterState>>,
+    ) -> EventStream<BoxStream<'static, PrinterState>> {
         EventStream::new(Api::_status_stream(state_receiver))
             .keep_alive(Duration::from_secs(15))
-            .to_event(|status| match status {
-                Some(status_update) => {
-                    Event::message(status_update.to_json_string()).event_type("status")
-                }
-                None => Event::Retry { retry: 1 },
-            })
+            .to_event(|status| Event::message(status.to_json_string()).event_type("status"))
     }
 
     fn _status_stream(
-        state_receiver: &Arc<broadcast::Receiver<PrinterState>>,
-    ) -> BoxStream<'static, Option<PrinterState>> {
-        BroadcastStream::new(state_receiver.resubscribe())
-            .map(|result| result.ok())
-            .boxed()
+        state_receiver: &watch::Receiver<PrinterState>,
+    ) -> BoxStream<'static, PrinterState> {
+        WatchStream::new(state_receiver.clone()).boxed()
     }
 
     fn _get_filedata(
@@ -133,29 +123,10 @@ impl Api {
     }
 }
 
-async fn run_state_listener(
-    mut state_receiver: broadcast::Receiver<PrinterState>,
-    state_ref: Arc<RwLock<PrinterState>>,
-) {
-    let mut interv = interval(Duration::from_millis(1000));
-
-    let mut state: Result<PrinterState, broadcast::error::TryRecvError>;
-
-    loop {
-        state = state_receiver.try_recv();
-        if state.is_ok() {
-            let mut state_data = state_ref.write().await;
-            *state_data = state.clone().unwrap();
-        }
-
-        interv.tick().await;
-    }
-}
-
 pub async fn start_api(
     full_config: Arc<Configuration>,
     operation_sender: mpsc::Sender<Operation>,
-    state_receiver: broadcast::Receiver<PrinterState>,
+    state_receiver: watch::Receiver<PrinterState>,
     cancellation_token: CancellationToken,
 ) {
     let state_ref = Arc::new(RwLock::new(PrinterState {
@@ -169,11 +140,6 @@ pub async fn start_api(
         },
         status: PrinterStatus::Shutdown,
     }));
-
-    tokio::spawn(run_state_listener(
-        state_receiver.resubscribe(),
-        state_ref.clone(),
-    ));
 
     let addr = format!("0.0.0.0:{0}", full_config.api.port);
 
@@ -202,7 +168,7 @@ pub async fn start_api(
 
     let app = app
         .data(operation_sender)
-        .data(Arc::new(state_receiver))
+        .data(state_receiver)
         .data(state_ref.clone())
         .data(full_config)
         .data(api_shutdown_trigger)
