@@ -2,10 +2,10 @@ use std::{str::FromStr, sync::Arc};
 
 use clap::Parser;
 
-use serialport::ClearBuffer;
+use serialport::{ClearBuffer, SerialPort};
 use tokio::runtime::{Builder, Runtime};
 
-use odyssey::{configuration::Configuration, serial_handler::TTYPortHandler};
+use odyssey::{configuration::Configuration, serial_handler::SerialPortHandler};
 use tracing::level_filters::LevelFilter;
 
 #[derive(Parser, Debug)]
@@ -34,18 +34,7 @@ fn main() {
             .expect("Config could not be parsed. See example odyssey.yaml for expected fields:"),
     );
 
-    let mut serial = tokio_serial::new(
-        &configuration.printer.serial,
-        configuration.printer.baudrate,
-    )
-    .open()
-    .expect("Unable to open serial port");
-
-    serial
-        .clear(ClearBuffer::All)
-        .expect("Unable to clear serialport buffers");
-
-    let serial_handler = Box::new(TTYPortHandler::new(serial));
+    let serial_handler = Box::new(SerialPortHandler::new(&configuration.printer.serial, configuration.printer.baudrate).expect("Unable to open serialport"));
 
     odyssey::start_odyssey(build_runtime(), configuration, serial_handler);
 }

@@ -1,9 +1,11 @@
 use async_trait::async_trait;
-use std::io::{self, BufRead, BufReader, Write};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio_util::bytes::BytesMut;
+use std::io::{self, BufRead, Write};
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::time::{interval, timeout, Duration};
-use tokio_serial::SerialPort;
+use tokio_serial::{ClearBuffer, SerialPort, SerialStream};
 use tokio_util::sync::CancellationToken;
 
 use crate::error::OdysseyError;
@@ -141,28 +143,38 @@ pub trait SerialHandler {
         cancellation_token: CancellationToken,
     ) -> Result<(), OdysseyError>;
     fn get_internal_comms(&self) -> InternalCommsHandler;
+    async fn is_ready(&self) -> Result<(),OdysseyError>;
 }
 
-pub struct TTYPortHandler {
-    serial_port: Box<dyn SerialPort>,
+pub struct SerialPortHandler {
+    serial_stream: SerialStream,
     internal_comms: InternalCommsHandler,
 }
 
-impl TTYPortHandler {
-    pub fn new(serial_port: Box<dyn SerialPort>) -> TTYPortHandler {
-        TTYPortHandler {
-            serial_port,
+impl SerialPortHandler {
+    pub fn new(path: &String, baudrate: u32) -> Result<SerialPortHandler,OdysseyError> {
+
+            let mut serial_stream = tokio_serial::SerialStream::open(&tokio_serial::new(
+            path,
+            baudrate
+        ))?;
+
+        serial_stream.clear(ClearBuffer::All)?;
+        serial_stream.set_exclusive(false)?;
+
+        Ok(SerialPortHandler {
+            serial_stream,
             internal_comms: InternalCommsHandler::new(),
-        }
+        })
     }
 
     async fn _send_serial(&mut self, message: &String) -> Result<usize, OdysseyError> {
         loop {
-            match self.serial_port.write(message.as_bytes()) {
+            match self.serial_stream.try_write(message.as_bytes()) {
                 Ok(n) => {
                     tracing::trace!("Wrote {} bytes to serial connection", n);
 
-                    self.serial_port.flush()?;
+                    self.serial_stream.flush()?;
                     return Ok(n);
                 }
                 Err(e) => {
@@ -176,28 +188,29 @@ impl TTYPortHandler {
 }
 
 #[async_trait]
-impl SerialHandler for TTYPortHandler {
+impl SerialHandler for SerialPortHandler {
     fn get_internal_comms(&self) -> InternalCommsHandler {
         self.internal_comms.clone()
+    }
+
+    async fn is_ready(&self) -> Result<(),OdysseyError>{
+        self.serial_stream.readable().await?;
+        self.serial_stream.writable().await?;
+        Ok(())
     }
 
     async fn run(
         mut self: Box<Self>,
         cancellation_token: CancellationToken,
     ) -> Result<(), OdysseyError> {
-        let mut buf_reader = BufReader::new(
-            self.serial_port
-                .try_clone()
-                .map_err(|err| OdysseyError::hardware_error(Box::new(err), 0))?,
-        );
 
         let mut interval = interval(Duration::from_millis(100));
 
+            let mut read_buf: [u8; 1024] = [0;1024];
         loop {
             interval.tick().await;
 
-            let mut read_string = String::new();
-            match buf_reader.read_line(&mut read_string) {
+            match self.serial_stream.try_read(&mut read_buf) {
                 Err(e) => match e.kind() {
                     io::ErrorKind::TimedOut => {
                         continue;
@@ -207,8 +220,9 @@ impl SerialHandler for TTYPortHandler {
                 },
                 Ok(n) => {
                     if n > 0 {
+                        let read_string = str::from_utf8(&read_buf[0..n]).unwrap_or_default();
                         tracing::debug!("Read {} bytes from serial: {}", n, read_string.trim_end());
-                        self.internal_comms.send(read_string).await?;
+                        self.internal_comms.send(read_string.to_string()).await?;
                     }
                 }
             };
@@ -226,79 +240,3 @@ impl SerialHandler for TTYPortHandler {
     }
 }
 
-pub async fn run_listener(
-    serial_port: Box<dyn SerialPort>,
-    sender: Sender<String>,
-    cancellation_token: CancellationToken,
-) {
-    let mut buf_reader = BufReader::new(
-        serial_port
-            .try_clone()
-            .expect("Unable to clone serial port"),
-    );
-    let mut interval = interval(Duration::from_millis(100));
-
-    loop {
-        if cancellation_token.is_cancelled() {
-            log::info!("Shutting down serial read loop");
-            break;
-        }
-        interval.tick().await;
-        let mut read_string = String::new();
-        match buf_reader.read_line(&mut read_string) {
-            Err(e) => match e.kind() {
-                io::ErrorKind::TimedOut => {
-                    continue;
-                }
-                // Broken Pipe here
-                other_error => panic!("Error reading from serial port: {:?}", other_error),
-            },
-            Ok(n) => {
-                if n > 0 {
-                    tracing::debug!("Read {} bytes from serial: {}", n, read_string.trim_end());
-                    sender
-                        .send(read_string)
-                        .expect("Unable to send message to channel");
-                }
-            }
-        };
-    }
-}
-
-pub async fn run_writer(
-    mut serial_port: Box<dyn SerialPort>,
-    mut receiver: Receiver<String>,
-    cancellation_token: CancellationToken,
-) {
-    let mut interval = interval(Duration::from_millis(100));
-
-    loop {
-        if cancellation_token.is_cancelled() {
-            log::info!("Shutting down exiting serial write loop");
-            break;
-        }
-        interval.tick().await;
-
-        if let Ok(message) = receiver.recv().await {
-            while let Err(e) = send_serial(&mut serial_port, message.clone()).await {
-                match e.kind() {
-                    io::ErrorKind::Interrupted => {
-                        continue;
-                    }
-                    _ => break,
-                }
-            }
-        }
-    }
-}
-
-async fn send_serial(serial_port: &mut Box<dyn SerialPort>, message: String) -> io::Result<usize> {
-    let n = serial_port.write(message.as_bytes())?;
-
-    serial_port
-        .flush()
-        .expect("Unable to flush serial connection");
-
-    tracing::trace!("Wrote {} bytes", n);
-    Ok(n)
-}

@@ -151,6 +151,21 @@ impl From<io::Error> for OdysseyError {
         }
     }
 }
+impl From<tokio_serial::Error> for OdysseyError {
+    fn from(err: tokio_serial::Error) -> OdysseyError {
+        let error_code = match err.kind() {
+            serialport::ErrorKind::NoDevice => 404,
+            serialport::ErrorKind::InvalidInput |
+            serialport::ErrorKind::Unknown |
+            serialport::ErrorKind::Io(_) => 500,
+        };
+        OdysseyError {
+            error_type: ErrorType::FileError,
+            source: Box::new(err),
+            error_code,
+        }
+    }
+}
 impl From<self_update::errors::Error> for OdysseyError {
     fn from(err: self_update::errors::Error) -> Self {
         OdysseyError {
