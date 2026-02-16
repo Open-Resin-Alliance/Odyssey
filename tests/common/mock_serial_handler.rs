@@ -12,7 +12,7 @@ pub struct MockSerialHandler {
     internal_comms: InternalCommsHandler,
     pub response_map: HashMap<String, String>,
     pub default_response: String,
-    pub is_ready: bool
+    pub is_ready: bool,
 }
 
 impl MockSerialHandler {
@@ -38,12 +38,15 @@ impl SerialHandler for MockSerialHandler {
         self.internal_comms.clone()
     }
 
-    async fn is_ready(&self) -> Result<(),OdysseyError> {
+    async fn is_ready(&self) -> Result<(), OdysseyError> {
         if self.is_ready {
             Ok(())
-        }
-        else {
-            Err(OdysseyError { error_type: odyssey::error::ErrorType::HardwareError, source: "MockSerialHandler Not Ready".into(), error_code: 500 })
+        } else {
+            Err(OdysseyError {
+                error_type: odyssey::error::ErrorType::HardwareError,
+                source: "MockSerialHandler Not Ready".into(),
+                error_code: 500,
+            })
         }
     }
 

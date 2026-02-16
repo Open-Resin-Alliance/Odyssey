@@ -34,7 +34,13 @@ fn main() {
             .expect("Config could not be parsed. See example odyssey.yaml for expected fields:"),
     );
 
-    let serial_handler = Box::new(SerialPortHandler::new(&configuration.printer.serial, configuration.printer.baudrate).expect("Unable to open serialport"));
+    let serial_handler = Box::new(
+        SerialPortHandler::new(
+            &configuration.printer.serial,
+            configuration.printer.baudrate,
+        )
+        .expect("Unable to open serialport"),
+    );
 
     odyssey::start_odyssey(build_runtime(), configuration, serial_handler);
 }

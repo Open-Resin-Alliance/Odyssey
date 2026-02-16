@@ -1,11 +1,11 @@
 use async_trait::async_trait;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio_util::bytes::BytesMut;
 use std::io::{self, BufRead, Write};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::time::{interval, timeout, Duration};
 use tokio_serial::{ClearBuffer, SerialPort, SerialStream};
+use tokio_util::bytes::BytesMut;
 use tokio_util::sync::CancellationToken;
 
 use crate::error::OdysseyError;
@@ -143,7 +143,7 @@ pub trait SerialHandler {
         cancellation_token: CancellationToken,
     ) -> Result<(), OdysseyError>;
     fn get_internal_comms(&self) -> InternalCommsHandler;
-    async fn is_ready(&self) -> Result<(),OdysseyError>;
+    async fn is_ready(&self) -> Result<(), OdysseyError>;
 }
 
 pub struct SerialPortHandler {
@@ -152,12 +152,9 @@ pub struct SerialPortHandler {
 }
 
 impl SerialPortHandler {
-    pub fn new(path: &String, baudrate: u32) -> Result<SerialPortHandler,OdysseyError> {
-
-            let mut serial_stream = tokio_serial::SerialStream::open(&tokio_serial::new(
-            path,
-            baudrate
-        ))?;
+    pub fn new(path: &String, baudrate: u32) -> Result<SerialPortHandler, OdysseyError> {
+        let mut serial_stream =
+            tokio_serial::SerialStream::open(&tokio_serial::new(path, baudrate))?;
 
         serial_stream.clear(ClearBuffer::All)?;
         serial_stream.set_exclusive(false)?;
@@ -193,7 +190,7 @@ impl SerialHandler for SerialPortHandler {
         self.internal_comms.clone()
     }
 
-    async fn is_ready(&self) -> Result<(),OdysseyError>{
+    async fn is_ready(&self) -> Result<(), OdysseyError> {
         self.serial_stream.readable().await?;
         self.serial_stream.writable().await?;
         Ok(())
@@ -203,10 +200,9 @@ impl SerialHandler for SerialPortHandler {
         mut self: Box<Self>,
         cancellation_token: CancellationToken,
     ) -> Result<(), OdysseyError> {
-
         let mut interval = interval(Duration::from_millis(100));
 
-            let mut read_buf: [u8; 1024] = [0;1024];
+        let mut read_buf: [u8; 1024] = [0; 1024];
         loop {
             interval.tick().await;
 
@@ -239,4 +235,3 @@ impl SerialHandler for SerialPortHandler {
         }
     }
 }
-

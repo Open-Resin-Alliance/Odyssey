@@ -155,9 +155,9 @@ impl From<tokio_serial::Error> for OdysseyError {
     fn from(err: tokio_serial::Error) -> OdysseyError {
         let error_code = match err.kind() {
             serialport::ErrorKind::NoDevice => 404,
-            serialport::ErrorKind::InvalidInput |
-            serialport::ErrorKind::Unknown |
-            serialport::ErrorKind::Io(_) => 500,
+            serialport::ErrorKind::InvalidInput
+            | serialport::ErrorKind::Unknown
+            | serialport::ErrorKind::Io(_) => 500,
         };
         OdysseyError {
             error_type: ErrorType::FileError,
