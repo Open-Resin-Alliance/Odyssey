@@ -2,7 +2,7 @@ use std::{str::FromStr, sync::Arc};
 
 use clap::Parser;
 
-use serialport::{ClearBuffer};
+use serialport::ClearBuffer;
 use tokio::runtime::{Builder, Runtime};
 
 use odyssey::{configuration::Configuration, serial_handler::TTYPortHandler};

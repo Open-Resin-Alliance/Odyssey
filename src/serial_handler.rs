@@ -3,8 +3,8 @@ use std::io::{self, BufRead, BufReader, Write};
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::time::{interval, timeout, Duration};
-use tokio_util::sync::CancellationToken;
 use tokio_serial::SerialPort;
+use tokio_util::sync::CancellationToken;
 
 use crate::error::OdysseyError;
 
@@ -280,7 +280,7 @@ pub async fn run_writer(
         interval.tick().await;
 
         if let Ok(message) = receiver.recv().await {
-            while let Err(e) = send_serial( &mut serial_port, message.clone()).await {
+            while let Err(e) = send_serial(&mut serial_port, message.clone()).await {
                 match e.kind() {
                     io::ErrorKind::Interrupted => {
                         continue;
