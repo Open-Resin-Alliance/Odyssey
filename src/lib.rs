@@ -11,7 +11,7 @@ use git_version::git_version;
 use std::sync::Arc;
 use tokio::{
     runtime::Runtime,
-    sync::{broadcast, mpsc},
+    sync::{mpsc, watch},
 };
 
 pub mod api;
@@ -47,10 +47,10 @@ pub fn start_odyssey(
     let display: PrintDisplay = PrintDisplay::new(&configuration.display);
 
     let operation_channel = mpsc::channel::<Operation>(100);
-    let status_channel = broadcast::channel::<PrinterState>(100);
+    let status_channel = watch::channel::<PrinterState>(Default::default());
 
     let sender = operation_channel.0.clone();
-    let receiver = status_channel.1.resubscribe();
+    let receiver = status_channel.1.clone();
 
     let serial_handle =
         runtime.spawn(serial_handler.run(shutdown_handler.cancellation_token.clone()));
