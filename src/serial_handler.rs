@@ -223,7 +223,6 @@ impl SerialHandler for SerialPortHandler {
         let mut read_buf: [u8; 1024] = [0; 1024];
         loop {
             interval.tick().await;
-            tracing::trace!("SerialPort Loop");
 
             match self.get_serial_stream().await?.try_read(&mut read_buf) {
                 Err(e) => match e.kind() {
