@@ -153,12 +153,6 @@ pub struct SerialPortHandler {
 
 impl SerialPortHandler {
     pub fn new(path: &String, baudrate: u32) -> Result<SerialPortHandler, OdysseyError> {
-        let mut serial_stream =
-            tokio_serial::SerialStream::open(&tokio_serial::new(path, baudrate))?;
-
-        serial_stream.clear(ClearBuffer::All)?;
-        serial_stream.set_exclusive(false)?;
-
         Ok(SerialPortHandler {
             path: path.to_string(),
             baudrate,
