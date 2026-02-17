@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 
 SCRIPT_NAME=$(basename "$0")
 readonly SCRIPT_NAME
@@ -107,7 +108,7 @@ download_odyssey() {
     cp "${DIR}/configs/${CONFIG}" "${CONFIG_DEST}"
 }
 
-install_service() {
+write_odyssey_service() {
     cat <<EOF >>/etc/systemd/system/odyssey.service
 [Unit]
 Description=Run Odyssey Print Control Software
@@ -126,8 +127,29 @@ WantedBy=multi-user.target
 EOF
 }
 
-parse_args "$@"
-download_odyssey
-if [[ -z "$CREATE_SERVICE" ]]; then
-    install_service
+install_service() {
+    write_odyssey_service
+    systemctl daemon-reload
+    systemctl enable odyssey.service
+    systemctl start odyssey.service
+}
+
+require_root() {
+  if [[ $EUID -ne 0 ]]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+      printf '\n[%s] This script must be run as root or via sudo.\n' "$SCRIPT_NAME" >&2
+      exit 1
+    fi
+    printf '\n[%s] Elevating privileges with sudo...\n' "$SCRIPT_NAME"
+    exec sudo -E bash "$0" "$@"
+  fi
+}
+
+main() {
+    require_root
+    parse_args "$@"
+    download_odyssey
+    if [[ -z "$CREATE_SERVICE" ]]; then
+        install_service
 fi
+}
