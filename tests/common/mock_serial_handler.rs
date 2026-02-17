@@ -38,7 +38,7 @@ impl SerialHandler for MockSerialHandler {
         self.internal_comms.clone()
     }
 
-    async fn is_ready(&self) -> Result<(), OdysseyError> {
+    async fn is_ready(&mut self) -> Result<(), OdysseyError> {
         if self.is_ready {
             Ok(())
         } else {

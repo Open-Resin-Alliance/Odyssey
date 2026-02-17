@@ -143,11 +143,13 @@ pub trait SerialHandler {
         cancellation_token: CancellationToken,
     ) -> Result<(), OdysseyError>;
     fn get_internal_comms(&self) -> InternalCommsHandler;
-    async fn is_ready(&self) -> Result<(), OdysseyError>;
+    async fn is_ready(&mut self) -> Result<(), OdysseyError>;
 }
 
 pub struct SerialPortHandler {
-    serial_stream: SerialStream,
+    path: String,
+    baudrate: u32,
+    serial_stream: Option<SerialStream>,
     internal_comms: InternalCommsHandler,
 }
 
@@ -160,18 +162,41 @@ impl SerialPortHandler {
         serial_stream.set_exclusive(false)?;
 
         Ok(SerialPortHandler {
-            serial_stream,
+            path: path.to_string(),
+            baudrate,
+            serial_stream: None,
             internal_comms: InternalCommsHandler::new(),
         })
     }
 
+    async fn get_serial_stream(&mut self) -> Result<&mut SerialStream, OdysseyError> {
+        if self.serial_stream.is_none() {
+            let mut serial_stream = tokio_serial::SerialStream::open(&tokio_serial::new(
+                self.path.clone(),
+                self.baudrate,
+            ))?;
+
+            serial_stream.clear(ClearBuffer::All)?;
+            serial_stream.set_exclusive(false)?;
+            self.serial_stream = Some(serial_stream);
+        }
+        return self
+            .serial_stream
+            .as_mut()
+            .ok_or(OdysseyError::internal_state_error(
+                "Unable to open SerialPort".into(),
+                500,
+            ));
+    }
+
     async fn _send_serial(&mut self, message: &String) -> Result<usize, OdysseyError> {
+        let serial_stream: &mut SerialStream = self.get_serial_stream().await?;
         loop {
-            match self.serial_stream.try_write(message.as_bytes()) {
+            match serial_stream.try_write(message.as_bytes()) {
                 Ok(n) => {
                     tracing::trace!("Wrote {} bytes to serial connection", n);
 
-                    self.serial_stream.flush()?;
+                    serial_stream.flush()?;
                     return Ok(n);
                 }
                 Err(e) => {
@@ -190,9 +215,10 @@ impl SerialHandler for SerialPortHandler {
         self.internal_comms.clone()
     }
 
-    async fn is_ready(&self) -> Result<(), OdysseyError> {
-        self.serial_stream.readable().await?;
-        self.serial_stream.writable().await?;
+    async fn is_ready(&mut self) -> Result<(), OdysseyError> {
+        let serial_stream: &mut SerialStream = self.get_serial_stream().await?;
+        serial_stream.readable().await?;
+        serial_stream.writable().await?;
         Ok(())
     }
 
@@ -206,7 +232,7 @@ impl SerialHandler for SerialPortHandler {
         loop {
             interval.tick().await;
 
-            match self.serial_stream.try_read(&mut read_buf) {
+            match self.get_serial_stream().await?.try_read(&mut read_buf) {
                 Err(e) => match e.kind() {
                     io::ErrorKind::TimedOut => {
                         continue;
