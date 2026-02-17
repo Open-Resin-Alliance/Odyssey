@@ -217,15 +217,17 @@ impl SerialHandler for SerialPortHandler {
         mut self: Box<Self>,
         cancellation_token: CancellationToken,
     ) -> Result<(), OdysseyError> {
+        tracing::debug!("Starting SerialPort handler");
         let mut interval = interval(Duration::from_millis(100));
 
         let mut read_buf: [u8; 1024] = [0; 1024];
         loop {
             interval.tick().await;
+            tracing::trace!("SerialPort Loop");
 
             match self.get_serial_stream().await?.try_read(&mut read_buf) {
                 Err(e) => match e.kind() {
-                    io::ErrorKind::TimedOut => {
+                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => {
                         continue;
                     }
                     // Broken Pipe here
