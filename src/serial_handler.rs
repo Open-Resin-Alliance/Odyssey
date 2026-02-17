@@ -1,11 +1,9 @@
 use async_trait::async_trait;
-use std::io::{self, BufRead, Write};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use std::io::{self, Write};
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::time::{interval, timeout, Duration};
 use tokio_serial::{ClearBuffer, SerialPort, SerialStream};
-use tokio_util::bytes::BytesMut;
 use tokio_util::sync::CancellationToken;
 
 use crate::error::OdysseyError;
@@ -180,13 +178,12 @@ impl SerialPortHandler {
             serial_stream.set_exclusive(false)?;
             self.serial_stream = Some(serial_stream);
         }
-        return self
-            .serial_stream
+        self.serial_stream
             .as_mut()
             .ok_or(OdysseyError::internal_state_error(
                 "Unable to open SerialPort".into(),
                 500,
-            ));
+            ))
     }
 
     async fn _send_serial(&mut self, message: &String) -> Result<usize, OdysseyError> {
