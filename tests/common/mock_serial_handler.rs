@@ -12,7 +12,6 @@ pub struct MockSerialHandler {
     internal_comms: InternalCommsHandler,
     pub response_map: HashMap<String, String>,
     pub default_response: String,
-    pub is_ready: bool,
 }
 
 impl MockSerialHandler {
@@ -21,14 +20,10 @@ impl MockSerialHandler {
             internal_comms: InternalCommsHandler::new(),
             response_map: HashMap::new(),
             default_response,
-            is_ready: true,
         }
     }
     pub fn add_response(&mut self, message: String, response: String) {
         self.response_map.insert(message, response);
-    }
-    pub fn set_ready(&mut self, ready: bool) {
-        self.is_ready = ready;
     }
 }
 
@@ -36,18 +31,6 @@ impl MockSerialHandler {
 impl SerialHandler for MockSerialHandler {
     fn get_internal_comms(&self) -> InternalCommsHandler {
         self.internal_comms.clone()
-    }
-
-    async fn is_ready(&mut self) -> Result<(), OdysseyError> {
-        if self.is_ready {
-            Ok(())
-        } else {
-            Err(OdysseyError {
-                error_type: odyssey::error::ErrorType::HardwareError,
-                source: "MockSerialHandler Not Ready".into(),
-                error_code: 500,
-            })
-        }
     }
 
     async fn run(

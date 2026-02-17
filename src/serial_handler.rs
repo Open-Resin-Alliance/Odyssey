@@ -141,7 +141,6 @@ pub trait SerialHandler {
         cancellation_token: CancellationToken,
     ) -> Result<(), OdysseyError>;
     fn get_internal_comms(&self) -> InternalCommsHandler;
-    async fn is_ready(&mut self) -> Result<(), OdysseyError>;
 }
 
 pub struct SerialPortHandler {
@@ -204,13 +203,6 @@ impl SerialPortHandler {
 impl SerialHandler for SerialPortHandler {
     fn get_internal_comms(&self) -> InternalCommsHandler {
         self.internal_comms.clone()
-    }
-
-    async fn is_ready(&mut self) -> Result<(), OdysseyError> {
-        let serial_stream: &mut SerialStream = self.get_serial_stream().await?;
-        serial_stream.readable().await?;
-        serial_stream.writable().await?;
-        Ok(())
     }
 
     async fn run(
