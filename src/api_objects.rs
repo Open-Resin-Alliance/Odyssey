@@ -103,14 +103,14 @@ pub enum ThumbnailSize {
     Small,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Object)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Object, Default)]
 pub struct PhysicalState {
     pub z: f64,
     pub z_microns: u32,
     pub curing: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Object)]
+#[derive(Clone, Debug, Serialize, Deserialize, Object, Default)]
 pub struct PrinterState {
     pub print_data: Option<PrintMetadata>,
     pub paused: Option<bool>,
@@ -124,6 +124,12 @@ pub enum PrinterStatus {
     Printing,
     Idle,
     Shutdown,
+}
+
+impl Default for PrinterStatus {
+    fn default() -> Self {
+        Self::Shutdown
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Enum)]
