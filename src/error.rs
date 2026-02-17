@@ -151,6 +151,15 @@ impl From<io::Error> for OdysseyError {
         }
     }
 }
+impl From<tokio_serial::Error> for OdysseyError {
+    fn from(err: tokio_serial::Error) -> OdysseyError {
+        OdysseyError {
+            error_type: ErrorType::HardwareError,
+            source: Box::new(err),
+            error_code: 500,
+        }
+    }
+}
 impl From<self_update::errors::Error> for OdysseyError {
     fn from(err: self_update::errors::Error) -> Self {
         OdysseyError {
