@@ -227,9 +227,7 @@ impl SerialHandler for SerialPortHandler {
 
             match self.get_serial_stream().await?.try_read(&mut read_buf) {
                 Err(e) => match e.kind() {
-                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => {
-                        continue;
-                    }
+                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => {}
                     // Broken Pipe here
                     _ => Err(e)?,
                 },
