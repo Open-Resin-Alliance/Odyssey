@@ -3,7 +3,7 @@
 # This section holds the config fields related to the printer, such as its serial
 # connection and its frame buffer specs
 printer:
-  serial: /home/pi/printer_data/comms/klippy.serial
+  serial: /tmp/printer
   baudrate: 0
   max_z: 300
   default_lift: 10

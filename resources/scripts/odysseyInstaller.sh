@@ -46,7 +46,7 @@ RELEASE=$DEF_RELEASE
 TARGET=$DEF_TARGET
 DIR=$DEF_DIR
 CONFIG=$DEF_CONFIG
-CONFIG_DEST="$DEF_DIR/$DEF_CONFIG"
+CONFIG_DEST="$DEF_DIR/odyssey.yaml"
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -146,10 +146,12 @@ require_root() {
 }
 
 main() {
-    require_root
+    require_root "$@"
     parse_args "$@"
     download_odyssey
     if [[ -z "$CREATE_SERVICE" ]]; then
         install_service
-fi
+    fi
 }
+
+main "$@"
