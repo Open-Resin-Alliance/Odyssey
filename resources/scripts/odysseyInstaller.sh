@@ -67,7 +67,7 @@ parse_args() {
                 shift
                 ;;
             -c | --config)
-                CONFIG_DIR=$2
+                CONFIG=$2
                 shift
                 shift
                 ;;
