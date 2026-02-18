@@ -95,9 +95,9 @@ parse_args() {
 
 download_odyssey() {
     if [ "$RELEASE" == "latest" ]; then
-        odyssey_url="https://github.com/TheContrappostoShop/Odyssey/releases/latest/download/odyssey_$TARGET.tar.gz"
+        odyssey_url="https://github.com/Open-Resin-Alliance/Odyssey/releases/latest/download/odyssey_$TARGET.tar.gz"
     else
-        odyssey_url="https://github.com/TheContrappostoShop/Odyssey/releases/download/$RELEASE/odyssey_$TARGET.tar.gz"
+        odyssey_url="https://github.com/Open-Resin-Alliance/Odyssey/releases/download/$RELEASE/odyssey_$TARGET.tar.gz"
     fi
 
     mkdir -p "${DIR}"
@@ -105,11 +105,11 @@ download_odyssey() {
 
     wget "${odyssey_url}" -O - | tar -C "${DIR}" -xz
 
-    cp "${DIR}/configs/${CONFIG}" "${CONFIG_DEST}"
+    cp -f "${DIR}/configs/${CONFIG}" "${CONFIG_DEST}"
 }
 
 write_odyssey_service() {
-    cat <<EOF >>/etc/systemd/system/odyssey.service
+    cat <<EOF >/etc/systemd/system/odyssey.service
 [Unit]
 Description=Run Odyssey Print Control Software
 Requires=klipper.service
