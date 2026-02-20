@@ -7,10 +7,11 @@ use crate::{
     serial_handler::SerialHandler,
     shutdown_handler::ShutdownHandler,
 };
+use git_version::git_version;
 use std::sync::Arc;
 use tokio::{
     runtime::Runtime,
-    sync::{broadcast, mpsc},
+    sync::{mpsc, watch},
 };
 
 pub mod api;
@@ -28,6 +29,10 @@ pub mod updates;
 pub mod uploads;
 mod wrapped_framebuffer;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const COMPILE_TARGET: &str = env!("CARGO_COMPILE_TARGET");
+const COMMIT_HASH: &str = git_version!(fallback = "unknown");
+
 pub fn start_odyssey(
     runtime: Runtime,
     configuration: Arc<Configuration>,
@@ -43,10 +48,10 @@ pub fn start_odyssey(
     let display: PrintDisplay = PrintDisplay::new(&configuration.display);
 
     let operation_channel = mpsc::channel::<Operation>(100);
-    let status_channel = broadcast::channel::<PrinterState>(100);
+    let status_channel = watch::channel::<PrinterState>(Default::default());
 
     let sender = operation_channel.0.clone();
-    let receiver = status_channel.1.resubscribe();
+    let receiver = status_channel.1.clone();
 
     let serial_handle =
         runtime.spawn(serial_handler.run(shutdown_handler.cancellation_token.clone()));
