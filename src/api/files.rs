@@ -44,7 +44,7 @@ impl FilesApi {
     ) -> Result<()> {
         tracing::info!("Uploading file");
 
-        let print_upload_dir = configuration.api.get_print_upload_dir(&directory_label)?;
+        let print_upload_dir = configuration.api.get_file_dir(&directory_label)?;
 
         let file_name = file_upload
             .file
@@ -71,7 +71,7 @@ impl FilesApi {
         Query(page_size): Query<Option<usize>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<FilesResponse>> {
-        let print_upload_dir = configuration.api.get_print_upload_dir(&directory_label)?;
+        let print_upload_dir = configuration.api.get_file_dir(&directory_label)?;
 
         Ok(print_upload_dir
             .get_files(subdirectory, page_index, page_size)
@@ -87,7 +87,7 @@ impl FilesApi {
         Query(subdirectory): Query<Option<String>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Attachment<Vec<u8>>> {
-        let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
+        let print_upload_directory = configuration.api.get_file_dir(&directory_label)?;
 
         let file_data = print_upload_directory.get_file_from_subdir(&filename, subdirectory)?;
 
@@ -109,7 +109,7 @@ impl FilesApi {
         Query(subdirectory): Query<Option<String>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<PrintMetadata>> {
-        let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
+        let print_upload_directory = configuration.api.get_file_dir(&directory_label)?;
 
         let file_data = print_upload_directory.get_file_from_subdir(&filename, subdirectory)?;
 
@@ -128,7 +128,7 @@ impl FilesApi {
         Json(patch_metadata): Json<UpdatePrintUserMetadata>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<PrintMetadata>> {
-        let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
+        let print_upload_directory = configuration.api.get_file_dir(&directory_label)?;
 
         let file_data = print_upload_directory.get_file_from_subdir(&filename, subdirectory)?;
 
@@ -157,7 +157,7 @@ impl FilesApi {
     ) -> Result<Attachment<Vec<u8>>> {
         let size = size.unwrap_or(ThumbnailSize::Small);
 
-        let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
+        let print_upload_directory = configuration.api.get_file_dir(&directory_label)?;
 
         let file_data = print_upload_directory.get_file_from_subdir(&filename, subdirectory)?;
 
@@ -177,7 +177,7 @@ impl FilesApi {
         Query(subdirectory): Query<Option<String>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<Json<FileMetadata>> {
-        let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
+        let print_upload_directory = configuration.api.get_file_dir(&directory_label)?;
 
         let file_data = print_upload_directory.get_file_from_subdir(&filename, subdirectory)?;
 

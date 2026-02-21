@@ -84,7 +84,7 @@ impl ManualApi {
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
         Data(configuration): Data<&Arc<Configuration>>,
     ) -> Result<()> {
-        let print_upload_directory = configuration.api.get_print_upload_dir(&directory_label)?;
+        let print_upload_directory = configuration.api.get_file_dir(&directory_label)?;
 
         let file_data = print_upload_directory.get_file_from_subdir(&filename, subdirectory)?;
 

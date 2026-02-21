@@ -1,5 +1,5 @@
 use odyssey::configuration::{
-    ApiConfig, Configuration, DisplayConfig, GcodeConfig, PrintUploadDirectory, PrinterConfig,
+    ApiConfig, Configuration, DisplayConfig, GcodeConfig, FileDirectory, PrinterConfig,
 };
 
 pub mod mock_serial_handler;
@@ -42,7 +42,7 @@ pub fn default_test_configuration() -> Configuration {
             manual_move_command: None,
         },
         api: ApiConfig {
-            print_upload_dirs: vec![PrintUploadDirectory {
+            file_dirs: vec![FileDirectory {
                 label: "Uploads".to_string(),
                 description: None,
                 path: "uploads".to_string(),

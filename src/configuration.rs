@@ -49,7 +49,7 @@ pub struct GcodeConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Object)]
-pub struct PrintUploadDirectory {
+pub struct FileDirectory {
     pub label: String,
     pub description: Option<String>,
     pub path: String,
@@ -58,43 +58,47 @@ pub struct PrintUploadDirectory {
 #[optional_struct(UpdateApiConfig)]
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct ApiConfig {
-    pub print_upload_dirs: Vec<PrintUploadDirectory>,
+    pub file_dirs: Vec<FileDirectory>,
     pub port: u16,
     pub enable_docs: Option<bool>,
 }
 
 impl ApiConfig {
-    pub fn get_print_upload_dir(
+    pub fn get_file_dir(
         &self,
         label: &Option<String>,
-    ) -> Result<&PrintUploadDirectory, OdysseyError> {
+    ) -> Result<&FileDirectory, OdysseyError> {
         match label {
             Some(label) => self
-                .print_upload_dirs
+                .file_dirs
                 .iter()
                 .find(|upload_dir| upload_dir.label.eq_ignore_ascii_case(label))
                 .ok_or(OdysseyError::file_error(
                     format!("No upload directory configured for {label}").into(),
                     404,
                 )),
-            None => self.get_default_print_upload_dir(),
+            None => self.get_default_file_dir(),
         }
     }
 
-    pub fn get_default_print_upload_dir(&self) -> Result<&PrintUploadDirectory, OdysseyError> {
-        self.print_upload_dirs
+    pub fn get_default_file_dir(&self) -> Result<&FileDirectory, OdysseyError> {
+        self.file_dirs
             .first()
             .ok_or(OdysseyError::file_error(
                 "No upload directories configured".into(),
                 404,
             ))
     }
+
+    pub fn get_file_dirs(&self) -> Result<&Vec<FileDirectory>,OdysseyError> {
+        Ok(&self.file_dirs)
+    }
 }
 
 impl Default for ApiConfig {
     fn default() -> ApiConfig {
         ApiConfig {
-            print_upload_dirs: vec![PrintUploadDirectory {
+            file_dirs: vec![FileDirectory {
                 label: "Uploads".to_string(),
                 description: None,
                 path: "uploads".to_string(),

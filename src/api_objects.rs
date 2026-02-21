@@ -10,7 +10,7 @@ use poem_openapi::{Enum, Object};
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
-use crate::{configuration::PrintUploadDirectory, error::OdysseyError};
+use crate::{configuration::FileDirectory, error::OdysseyError};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct FileData {
@@ -32,18 +32,18 @@ pub struct FileMetadata {
     pub last_modified: Option<u64>,
     pub file_size: u64,
     pub file_type: FileType,
-    pub upload_directory: PrintUploadDirectory,
+    pub file_directory: FileDirectory,
 }
 
 impl FileMetadata {
     pub fn from_path(
         file_path: String,
-        upload_directory: &PrintUploadDirectory,
+        file_directory: &FileDirectory,
     ) -> Result<Self, io::Error>
     where
         Self: Sized,
     {
-        let path = Path::new(&upload_directory.path).join(&file_path);
+        let path = Path::new(&file_directory.path).join(&file_path);
 
         let metadata = path.metadata()?;
 
@@ -75,11 +75,11 @@ impl FileMetadata {
             last_modified: modified_time,
             file_size,
             file_type,
-            upload_directory: upload_directory.clone(),
+            file_directory: file_directory.clone(),
         })
     }
     pub fn get_full_path(&self) -> PathBuf {
-        Path::new(self.upload_directory.path.as_str()).join(self.path.as_str())
+        Path::new(self.file_directory.path.as_str()).join(self.path.as_str())
     }
     pub fn open_file(&self) -> Result<File, OdysseyError> {
         Ok(File::open(self.get_full_path())?)

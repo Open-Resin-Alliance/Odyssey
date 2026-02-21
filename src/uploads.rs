@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     api_objects::{FileMetadata, FileType, PrintMetadata},
-    configuration::PrintUploadDirectory,
+    configuration::FileDirectory,
     error::OdysseyError,
     printfile::PrintFile,
 };
@@ -24,7 +24,7 @@ pub struct FilesResponse {
 const DEFAULT_PAGE_INDEX: usize = 0;
 const DEFAULT_PAGE_SIZE: usize = 100;
 
-impl PrintUploadDirectory {
+impl FileDirectory {
     pub fn get_file_from_subdir(
         &self,
         filename: &str,
@@ -75,7 +75,7 @@ impl PrintUploadDirectory {
             last_modified: modified_time,
             file_size,
             file_type,
-            upload_directory: self.clone(),
+            file_directory: self.clone(),
         })
     }
 
