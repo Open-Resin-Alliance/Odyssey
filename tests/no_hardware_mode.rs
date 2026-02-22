@@ -1,4 +1,8 @@
-use std::{fs::{self,File, DirBuilder}, sync::Arc, time::Duration};
+use std::{
+    fs::{self, DirBuilder, File},
+    sync::Arc,
+    time::Duration,
+};
 
 use crate::common::{mock_serial_handler::MockSerialHandler, test_resource_path};
 use odyssey::configuration::{Configuration, FileDirectory};
@@ -33,14 +37,17 @@ fn _no_hardware_mode(temp_uploads: bool) {
         .init();
 
     let temp_dir = tempfile::TempDir::new().expect("Unable to create temp directory for test");
-    
-    DirBuilder::new().create(temp_dir.path().join("uploads")).expect("Unable to generate uploads directory");
-    DirBuilder::new().create(temp_dir.path().join("config")).expect("Unable to generate config directory");
+
+    DirBuilder::new()
+        .create(temp_dir.path().join("uploads"))
+        .expect("Unable to generate uploads directory");
+    DirBuilder::new()
+        .create(temp_dir.path().join("config"))
+        .expect("Unable to generate config directory");
 
     let temp_config = temp_dir.path().join("config/mockConfig.yaml");
     let temp_fb = temp_dir.path().join("config/mockFb");
     File::create(&temp_fb).expect("Unable to generate mock FrameBuffer file");
-    
 
     tracing::info!("Write frames to {}", temp_fb.display());
 
@@ -51,15 +58,29 @@ fn _no_hardware_mode(temp_uploads: bool) {
     configuration.config_file = Some(temp_config.as_os_str().to_str().unwrap().to_owned());
 
     if temp_uploads {
-        configuration.api.file_dirs = vec![FileDirectory {
-            label: "Uploads".to_string(),
-            description: None,
-            path: temp_dir.path().join("uploads").as_os_str().to_str().unwrap().to_owned(),
-        },FileDirectory {
-            label: "Config".to_string(),
-            description: Some("Houses the test Odyssey Config and Comms files".to_string()),
-            path: temp_dir.path().join("config").as_os_str().to_str().unwrap().to_owned(),
-        },
+        configuration.api.file_dirs = vec![
+            FileDirectory {
+                label: "Uploads".to_string(),
+                description: None,
+                path: temp_dir
+                    .path()
+                    .join("uploads")
+                    .as_os_str()
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+            },
+            FileDirectory {
+                label: "Config".to_string(),
+                description: Some("Houses the test Odyssey Config and Comms files".to_string()),
+                path: temp_dir
+                    .path()
+                    .join("config")
+                    .as_os_str()
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+            },
         ];
     }
 

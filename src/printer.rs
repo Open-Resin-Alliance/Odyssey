@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 use tokio::sync::watch;
 use tokio::sync::RwLock;
-use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::api_objects::DisplayTest;

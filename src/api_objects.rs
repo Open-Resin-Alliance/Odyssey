@@ -36,10 +36,7 @@ pub struct FileMetadata {
 }
 
 impl FileMetadata {
-    pub fn from_path(
-        file_path: String,
-        file_directory: &FileDirectory,
-    ) -> Result<Self, io::Error>
+    pub fn from_path(file_path: String, file_directory: &FileDirectory) -> Result<Self, io::Error>
     where
         Self: Sized,
     {

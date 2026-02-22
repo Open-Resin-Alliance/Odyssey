@@ -1,5 +1,5 @@
 use odyssey::configuration::{
-    ApiConfig, Configuration, DisplayConfig, GcodeConfig, FileDirectory, PrinterConfig,
+    ApiConfig, Configuration, DisplayConfig, FileDirectory, GcodeConfig, PrinterConfig,
 };
 
 pub mod mock_serial_handler;

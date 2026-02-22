@@ -64,10 +64,7 @@ pub struct ApiConfig {
 }
 
 impl ApiConfig {
-    pub fn get_file_dir(
-        &self,
-        label: &Option<String>,
-    ) -> Result<&FileDirectory, OdysseyError> {
+    pub fn get_file_dir(&self, label: &Option<String>) -> Result<&FileDirectory, OdysseyError> {
         match label {
             Some(label) => self
                 .file_dirs
@@ -82,15 +79,13 @@ impl ApiConfig {
     }
 
     pub fn get_default_file_dir(&self) -> Result<&FileDirectory, OdysseyError> {
-        self.file_dirs
-            .first()
-            .ok_or(OdysseyError::file_error(
-                "No upload directories configured".into(),
-                404,
-            ))
+        self.file_dirs.first().ok_or(OdysseyError::file_error(
+            "No upload directories configured".into(),
+            404,
+        ))
     }
 
-    pub fn get_file_dirs(&self) -> Result<&Vec<FileDirectory>,OdysseyError> {
+    pub fn get_file_dirs(&self) -> Result<&Vec<FileDirectory>, OdysseyError> {
         Ok(&self.file_dirs)
     }
 }

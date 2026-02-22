@@ -24,9 +24,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::{
-    api_objects::{
-        ExecutableVersion, PhysicalState, PrinterState, PrinterStatus,
-    },
+    api_objects::{ExecutableVersion, PhysicalState, PrinterState, PrinterStatus},
     configuration::Configuration,
     error::OdysseyError,
     printer::Operation,
