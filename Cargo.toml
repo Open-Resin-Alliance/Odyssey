@@ -13,6 +13,7 @@ toml_edit = {version = "0.22.24", features=["serde"]}
 optional_struct = "0.5.2"
 serde = "1.0"
 serde_yaml = "0.9"
+serde_json = "1.0"
 zip = "1.1.1"
 itertools = "0.12.1"
 png = "0.17.7"

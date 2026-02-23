@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, DirBuilder, File},
+    fs::{DirBuilder, File},
     sync::Arc,
     time::Duration,
 };
