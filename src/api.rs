@@ -8,7 +8,6 @@ use std::{sync::Arc, time::Duration};
 
 use futures::{stream::BoxStream, StreamExt};
 use poem::{
-    error::NotFound,
     listener::TcpListener,
     middleware::Cors,
     web::{sse::Event, Data},
@@ -25,15 +24,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::{
-    api_objects::{
-        ExecutableVersion, FileMetadata, LocationCategory, PhysicalState, PrintMetadata,
-        PrinterState, PrinterStatus,
-    },
-    configuration::{ApiConfig, Configuration},
+    api_objects::{ExecutableVersion, PhysicalState, PrinterState, PrinterStatus},
+    configuration::Configuration,
     error::OdysseyError,
     printer::Operation,
-    printfile::PrintFile,
-    sl1::Sl1,
     COMMIT_HASH, COMPILE_TARGET, VERSION,
 };
 
@@ -98,28 +92,6 @@ impl Api {
         state_receiver: &watch::Receiver<PrinterState>,
     ) -> BoxStream<'static, PrinterState> {
         WatchStream::new(state_receiver.clone()).boxed()
-    }
-
-    fn _get_filedata(
-        file_path: &str,
-        location: LocationCategory,
-        configuration: &ApiConfig,
-    ) -> Result<FileMetadata> {
-        tracing::info!("Getting file data");
-
-        // TODO handle USB _get_filedata
-        FileMetadata::from_path(file_path, &configuration.upload_path, location).map_err(NotFound)
-    }
-
-    fn _get_print_metadata(
-        file_path: &str,
-        location: LocationCategory,
-        configuration: &ApiConfig,
-    ) -> Result<PrintMetadata> {
-        let file_data = Api::_get_filedata(file_path, location, configuration)?;
-        tracing::info!("Extracting print metadata");
-
-        Ok(Sl1::from_file(file_data).map_err(NotFound)?.get_metadata())
     }
 }
 
