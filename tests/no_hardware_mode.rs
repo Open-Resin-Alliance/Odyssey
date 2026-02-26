@@ -130,10 +130,11 @@ pub async fn serial_feedback_loop(
                     .send(response)
                     .expect("Unable to send gcode response message");
             }
-            Err(err) => match err {
-                broadcast::error::TryRecvError::Empty => continue,
-                _ => (),
-            },
+            Err(err) => {
+                if err == broadcast::error::TryRecvError::Empty {
+                    continue;
+                }
+            }
         };
     }
 }
