@@ -1,5 +1,4 @@
 use std::{
-    default,
     fs::{DirBuilder, File},
     sync::Arc,
     time::Duration,
@@ -168,11 +167,11 @@ pub async fn serial_feedback_loop(
             Ok(command) => {
                 tracing::info!("{}", command);
 
-                let response: String;
+                let response: String =
                 if command.as_str().trim() == status_check.trim() {
-                    response = status_desired.clone();
+                    status_desired.clone()
                 } else {
-                    response = move_sync.clone();
+                     move_sync.clone()
                 };
 
                 tracing::info!("command='{}', response='{}'", command.trim(), response);
