@@ -17,6 +17,7 @@ mod common;
 #[derive(Default)]
 struct NoHardwareSettings {
     temp_uploads: bool,
+    zero_times: bool,
     screen_width: Option<u32>,
     screen_height: Option<u32>,
     pixel_format: Option<PixelFormat>,
@@ -27,6 +28,7 @@ struct NoHardwareSettings {
 fn no_hardware_tmp() {
     _no_hardware_mode(NoHardwareSettings {
         temp_uploads: true,
+        zero_times: true,
         ..Default::default()
     });
 }
@@ -36,6 +38,7 @@ fn no_hardware_tmp() {
 fn emulated_fb() {
     _no_hardware_mode(NoHardwareSettings {
         temp_uploads: true,
+        zero_times: false,
         screen_width: Some(192),
         screen_height: Some(108),
         pixel_format: Some(PixelFormat {
@@ -51,6 +54,7 @@ fn emulated_fb() {
 fn no_hardware_mode() {
     _no_hardware_mode(NoHardwareSettings {
         temp_uploads: false,
+        zero_times: true,
         ..Default::default()
     });
 }
@@ -95,6 +99,10 @@ fn _no_hardware_mode(settings: NoHardwareSettings) {
     }
     if let Some(screen_height) = settings.screen_height {
         configuration.display.screen_height = screen_height;
+    }
+    if settings.zero_times {
+        configuration.printer.default_wait_before_exposure = 0.0;
+        configuration.printer.default_wait_after_exposure = 0.0;
     }
     if settings.temp_uploads {
         configuration.api.file_dirs = vec![
