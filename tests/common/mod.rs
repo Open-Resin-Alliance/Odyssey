@@ -1,5 +1,5 @@
 use odyssey::configuration::{
-    ApiConfig, Configuration, DisplayConfig, GcodeConfig, PixelFormat, PrinterConfig,
+    ApiConfig, Configuration, DisplayConfig, GcodeConfig,FileDirectory, PixelFormat, PrinterConfig,
 };
 
 pub mod mock_serial_handler;
@@ -42,8 +42,11 @@ pub fn default_test_configuration() -> Configuration {
             manual_move_command: None,
         },
         api: ApiConfig {
-            upload_path: upload_path(),
-            usb_glob: upload_path(),
+            file_dirs: vec![FileDirectory {
+                label: "Uploads".to_string(),
+                description: None,
+                path: "uploads".to_string(),
+            }],
             port: 12357,
             enable_docs: Some(true),
         },
