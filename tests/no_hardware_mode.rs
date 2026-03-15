@@ -5,7 +5,8 @@ use std::{
 };
 
 use crate::common::{mock_serial_handler::MockSerialHandler, test_resource_path};
-use odyssey::configuration::{Configuration, FileDirectory};
+use odyssey::configuration::{Configuration, FileDirectory, PixelFormat};
+
 use tokio::{
     runtime::{Builder, Runtime},
     sync::broadcast::{self, Receiver, Sender},
@@ -16,27 +17,63 @@ use tracing::Level;
 
 mod common;
 
+#[derive(Default)]
+struct NoHardwareSettings {
+    temp_uploads: bool,
+    zero_times: bool,
+    screen_width: Option<u32>,
+    screen_height: Option<u32>,
+    pixel_format: Option<PixelFormat>,
+}
+
 #[test]
 #[ignore]
 fn no_hardware_tmp() {
-    _no_hardware_mode(true);
+    _no_hardware_mode(NoHardwareSettings {
+        temp_uploads: true,
+        zero_times: true,
+        ..Default::default()
+    });
+}
+
+#[test]
+#[ignore]
+fn emulated_fb() {
+    _no_hardware_mode(NoHardwareSettings {
+        temp_uploads: true,
+        zero_times: false,
+        screen_width: Some(192),
+        screen_height: Some(108),
+        pixel_format: Some(PixelFormat {
+            bit_depth: vec![8],
+            left_pad_bits: 0,
+            right_pad_bits: 0,
+        }),
+    });
 }
 
 #[test]
 #[ignore]
 fn no_hardware_mode() {
-    _no_hardware_mode(false);
+    _no_hardware_mode(NoHardwareSettings {
+        temp_uploads: false,
+        zero_times: true,
+        ..Default::default()
+    });
 }
 
 /**
  * Run Odyssey without any hardware. This is a manual testing utility, not an automated test.
  */
-fn _no_hardware_mode(temp_uploads: bool) {
+fn _no_hardware_mode(settings: NoHardwareSettings) {
     tracing_subscriber::fmt()
         .with_max_level(Level::TRACE)
         .init();
 
-    let temp_dir = tempfile::TempDir::new().expect("Unable to create temp directory for test");
+    let temp_dir = tempfile::Builder::new()
+        .prefix("odysseyTest")
+        .tempdir()
+        .expect("Unable to create temp directory for test");
 
     DirBuilder::new()
         .create(temp_dir.path().join("uploads"))
@@ -57,7 +94,20 @@ fn _no_hardware_mode(temp_uploads: bool) {
     configuration.display.frame_buffer = temp_fb.as_os_str().to_str().unwrap().to_owned();
     configuration.config_file = Some(temp_config.as_os_str().to_str().unwrap().to_owned());
 
-    if temp_uploads {
+    if let Some(pixel_format) = settings.pixel_format {
+        configuration.display.pixel_format = pixel_format;
+    }
+    if let Some(screen_width) = settings.screen_width {
+        configuration.display.screen_width = screen_width;
+    }
+    if let Some(screen_height) = settings.screen_height {
+        configuration.display.screen_height = screen_height;
+    }
+    if settings.zero_times {
+        configuration.printer.default_wait_before_exposure = 0.0;
+        configuration.printer.default_wait_after_exposure = 0.0;
+    }
+    if settings.temp_uploads {
         configuration.api.file_dirs = vec![
             FileDirectory {
                 label: "Uploads".to_string(),
@@ -117,11 +167,10 @@ pub async fn serial_feedback_loop(
             Ok(command) => {
                 tracing::info!("{}", command);
 
-                let response: String;
-                if command.as_str().trim() == status_check.trim() {
-                    response = status_desired.clone();
+                let response: String = if command.as_str().trim() == status_check.trim() {
+                    status_desired.clone()
                 } else {
-                    response = move_sync.clone();
+                    move_sync.clone()
                 };
 
                 tracing::info!("command='{}', response='{}'", command.trim(), response);

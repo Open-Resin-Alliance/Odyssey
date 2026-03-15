@@ -17,12 +17,13 @@ printer:
 # This section holds fields pertaining to the display used by the printer
 display:
   frame_buffer: /dev/fb0
-  bit_depth:
-    - 5
-    - 6
-    - 5
   screen_width: 6480
   screen_height: 3600
+  pixel_format:
+    bit_depth:
+     - 5
+     - 6
+     - 5
 
 # This section holds fields pertaining to the Gcode used to drive the machine's
 # hardware, and signal between the board and Odyssey

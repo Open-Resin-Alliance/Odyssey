@@ -131,17 +131,12 @@ pub struct PrinterState {
     pub status: PrinterStatus,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Enum)]
+#[derive(Clone, Debug, Serialize, Deserialize, Enum, Default)]
 pub enum PrinterStatus {
     Printing,
     Idle,
+    #[default]
     Shutdown,
-}
-
-impl Default for PrinterStatus {
-    fn default() -> Self {
-        Self::Shutdown
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Enum)]
@@ -150,6 +145,8 @@ pub enum DisplayTest {
     Blank,
     Grid,
     Dimensions,
+    Diagonal,
+    ValueRange,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
