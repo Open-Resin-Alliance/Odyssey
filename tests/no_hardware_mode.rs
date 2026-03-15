@@ -1,8 +1,12 @@
-use std::{default,
-    fs::{DirBuilder, File}, sync::Arc, time::Duration};
+use std::{
+    default,
+    fs::{DirBuilder, File},
+    sync::Arc,
+    time::Duration,
+};
 
 use crate::common::{mock_serial_handler::MockSerialHandler, test_resource_path};
-use odyssey::configuration::{Configuration, PixelFormat, FileDirectory};
+use odyssey::configuration::{Configuration, FileDirectory, PixelFormat};
 
 use tokio::{
     runtime::{Builder, Runtime},
