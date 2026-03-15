@@ -131,15 +131,13 @@ pub struct PrinterState {
     pub status: PrinterStatus,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Enum)]
-#[derive(Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Enum, Default)]
 pub enum PrinterStatus {
     Printing,
     Idle,
     #[default]
     Shutdown,
 }
-
 
 #[derive(Clone, Debug, Serialize, Deserialize, Enum)]
 pub enum DisplayTest {

@@ -167,11 +167,10 @@ pub async fn serial_feedback_loop(
             Ok(command) => {
                 tracing::info!("{}", command);
 
-                let response: String =
-                if command.as_str().trim() == status_check.trim() {
+                let response: String = if command.as_str().trim() == status_check.trim() {
                     status_desired.clone()
                 } else {
-                     move_sync.clone()
+                    move_sync.clone()
                 };
 
                 tracing::info!("command='{}', response='{}'", command.trim(), response);
