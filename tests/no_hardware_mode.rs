@@ -1,7 +1,12 @@
-use std::{default, fs, sync::Arc, time::Duration};
+use std::{
+    fs::{DirBuilder, File},
+    sync::Arc,
+    time::Duration,
+};
 
 use crate::common::{mock_serial_handler::MockSerialHandler, test_resource_path};
-use odyssey::configuration::{Configuration, PixelFormat};
+use odyssey::configuration::{Configuration, FileDirectory, PixelFormat};
+
 use tokio::{
     runtime::{Builder, Runtime},
     sync::broadcast::{self, Receiver, Sender},
@@ -15,6 +20,7 @@ mod common;
 #[derive(Default)]
 struct NoHardwareSettings {
     temp_uploads: bool,
+    zero_times: bool,
     screen_width: Option<u32>,
     screen_height: Option<u32>,
     pixel_format: Option<PixelFormat>,
@@ -25,6 +31,7 @@ struct NoHardwareSettings {
 fn no_hardware_tmp() {
     _no_hardware_mode(NoHardwareSettings {
         temp_uploads: true,
+        zero_times: true,
         ..Default::default()
     });
 }
@@ -34,6 +41,7 @@ fn no_hardware_tmp() {
 fn emulated_fb() {
     _no_hardware_mode(NoHardwareSettings {
         temp_uploads: true,
+        zero_times: false,
         screen_width: Some(192),
         screen_height: Some(108),
         pixel_format: Some(PixelFormat {
@@ -49,6 +57,7 @@ fn emulated_fb() {
 fn no_hardware_mode() {
     _no_hardware_mode(NoHardwareSettings {
         temp_uploads: false,
+        zero_times: true,
         ..Default::default()
     });
 }
@@ -66,9 +75,16 @@ fn _no_hardware_mode(settings: NoHardwareSettings) {
         .tempdir()
         .expect("Unable to create temp directory for test");
 
-    let temp_config = temp_dir.path().join("mockConfig.yaml");
-    let temp_fb = temp_dir.path().join("mockFb");
-    fs::File::create(&temp_fb).expect("Unable to generate mock FrameBuffer file");
+    DirBuilder::new()
+        .create(temp_dir.path().join("uploads"))
+        .expect("Unable to generate uploads directory");
+    DirBuilder::new()
+        .create(temp_dir.path().join("config"))
+        .expect("Unable to generate config directory");
+
+    let temp_config = temp_dir.path().join("config/mockConfig.yaml");
+    let temp_fb = temp_dir.path().join("config/mockFb");
+    File::create(&temp_fb).expect("Unable to generate mock FrameBuffer file");
 
     tracing::info!("Write frames to {}", temp_fb.display());
 
@@ -87,9 +103,35 @@ fn _no_hardware_mode(settings: NoHardwareSettings) {
     if let Some(screen_height) = settings.screen_height {
         configuration.display.screen_height = screen_height;
     }
-
+    if settings.zero_times {
+        configuration.printer.default_wait_before_exposure = 0.0;
+        configuration.printer.default_wait_after_exposure = 0.0;
+    }
     if settings.temp_uploads {
-        configuration.api.upload_path = temp_dir.path().as_os_str().to_str().unwrap().to_owned();
+        configuration.api.file_dirs = vec![
+            FileDirectory {
+                label: "Uploads".to_string(),
+                description: None,
+                path: temp_dir
+                    .path()
+                    .join("uploads")
+                    .as_os_str()
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+            },
+            FileDirectory {
+                label: "Config".to_string(),
+                description: Some("Houses the test Odyssey Config and Comms files".to_string()),
+                path: temp_dir
+                    .path()
+                    .join("config")
+                    .as_os_str()
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+            },
+        ];
     }
 
     Configuration::overwrite_file(&configuration).expect("Unable to save temporary config file");
@@ -125,11 +167,10 @@ pub async fn serial_feedback_loop(
             Ok(command) => {
                 tracing::info!("{}", command);
 
-                let response: String;
-                if command.as_str().trim() == status_check.trim() {
-                    response = status_desired.clone();
+                let response: String = if command.as_str().trim() == status_check.trim() {
+                    status_desired.clone()
                 } else {
-                    response = move_sync.clone();
+                    move_sync.clone()
                 };
 
                 tracing::info!("command='{}', response='{}'", command.trim(), response);
@@ -138,10 +179,11 @@ pub async fn serial_feedback_loop(
                     .send(response)
                     .expect("Unable to send gcode response message");
             }
-            Err(err) => match err {
-                broadcast::error::TryRecvError::Empty => continue,
-                _ => (),
-            },
+            Err(err) => {
+                if err == broadcast::error::TryRecvError::Empty {
+                    continue;
+                }
+            }
         };
     }
 }

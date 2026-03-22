@@ -128,9 +128,9 @@ impl PrintDisplay {
     }
 
     fn display_test_diagonal(&mut self, width: u32) -> Vec<u8> {
-        let val_from_pixel_index = |index| {
-            let row = index / self.config.screen_width;
-            match ((index + row) / width) % 2 == 0 {
+        let val_from_pixel_index = |index: u32| {
+            let row: u32 = index / self.config.screen_width;
+            match ((index + row) / width).is_multiple_of(2) {
                 true => 0x00,
                 false => 0xFF,
             }

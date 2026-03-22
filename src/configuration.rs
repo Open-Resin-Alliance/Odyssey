@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Debug, fs, io, sync::Arc};
 use tokio::sync::RwLock;
 
+use crate::error::OdysseyError;
+
 #[optional_struct(UpdatePrinterConfig)]
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct PrinterConfig {
@@ -55,20 +57,56 @@ pub struct GcodeConfig {
     pub status_desired: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Object)]
+pub struct FileDirectory {
+    pub label: String,
+    pub description: Option<String>,
+    pub path: String,
+}
+
 #[optional_struct(UpdateApiConfig)]
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct ApiConfig {
-    pub upload_path: String,
-    pub usb_glob: String,
+    pub file_dirs: Vec<FileDirectory>,
     pub port: u16,
     pub enable_docs: Option<bool>,
+}
+
+impl ApiConfig {
+    pub fn get_file_dir(&self, label: &Option<String>) -> Result<&FileDirectory, OdysseyError> {
+        match label {
+            Some(label) => self
+                .file_dirs
+                .iter()
+                .find(|upload_dir| upload_dir.label.eq_ignore_ascii_case(label))
+                .ok_or(OdysseyError::file_error(
+                    format!("No upload directory configured for {label}").into(),
+                    404,
+                )),
+            None => self.get_default_file_dir(),
+        }
+    }
+
+    pub fn get_default_file_dir(&self) -> Result<&FileDirectory, OdysseyError> {
+        self.file_dirs.first().ok_or(OdysseyError::file_error(
+            "No upload directories configured".into(),
+            404,
+        ))
+    }
+
+    pub fn get_file_dirs(&self) -> Result<&Vec<FileDirectory>, OdysseyError> {
+        Ok(&self.file_dirs)
+    }
 }
 
 impl Default for ApiConfig {
     fn default() -> ApiConfig {
         ApiConfig {
-            upload_path: "uploads".to_string(),
-            usb_glob: "".to_string(),
+            file_dirs: vec![FileDirectory {
+                label: "Uploads".to_string(),
+                description: None,
+                path: "uploads".to_string(),
+            }],
             port: 12357,
             enable_docs: Some(false),
         }
