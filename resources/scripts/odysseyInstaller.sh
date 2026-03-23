@@ -149,7 +149,7 @@ main() {
     require_root "$@"
     parse_args "$@"
     download_odyssey
-    if [[ -z "$CREATE_SERVICE" ]]; then
+    if [[ "$CREATE_SERVICE" ]]; then
         install_service
     fi
 }
