@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::common::{mock_serial_handler::MockSerialHandler, test_resource_path};
-use odyssey::configuration::{Configuration, FileDirectory, PixelFormat};
+use odyssey::{configuration::{Configuration, FileDirectory, PixelFormat}, serial_handler::{SerialHandler, SerialPortHandler}};
 
 use tokio::{
     runtime::{Builder, Runtime},
@@ -21,6 +21,7 @@ mod common;
 struct NoHardwareSettings {
     temp_uploads: bool,
     zero_times: bool,
+    emulated_serial: Option<String>,
     screen_width: Option<u32>,
     screen_height: Option<u32>,
     pixel_format: Option<PixelFormat>,
@@ -49,6 +50,18 @@ fn emulated_fb() {
             left_pad_bits: 0,
             right_pad_bits: 0,
         }),
+        ..Default::default()
+    });
+}
+
+#[test]
+#[ignore]
+fn emulated_serial() {
+    _no_hardware_mode(NoHardwareSettings {
+        temp_uploads: true,
+        zero_times: false,
+        emulated_serial: Some("/dev/pts/8".to_owned()),
+        ..Default::default()
     });
 }
 
@@ -94,6 +107,9 @@ fn _no_hardware_mode(settings: NoHardwareSettings) {
     configuration.display.frame_buffer = temp_fb.as_os_str().to_str().unwrap().to_owned();
     configuration.config_file = Some(temp_config.as_os_str().to_str().unwrap().to_owned());
 
+    if let Some(emulated_serial) = &settings.emulated_serial {
+        configuration.printer.serial = emulated_serial.clone();
+    }
     if let Some(pixel_format) = settings.pixel_format {
         configuration.display.pixel_format = pixel_format;
     }
@@ -138,13 +154,28 @@ fn _no_hardware_mode(settings: NoHardwareSettings) {
 
     let config = Arc::new(configuration);
 
-    let mut serial_handler = MockSerialHandler::new(config.gcode.move_sync.clone());
-    serial_handler.add_response(
-        config.gcode.status_check.trim().to_string(),
-        config.gcode.status_desired.trim().to_string(),
-    );
+    let serial_handler: Box<dyn SerialHandler + Send + 'static> = match settings.emulated_serial {
+        Some(_) =>
+                Box::new(
+                    SerialPortHandler::new(
+                        &config.printer.serial,
+                        config.printer.baudrate,
+                    )
+                    .expect("Unable to open serialport"),)
+        ,
+        None => {
+            let mut serial_handler = MockSerialHandler::new(config.gcode.move_sync.clone());
+            serial_handler.add_response(
+                config.gcode.status_check.trim().to_string(),
+                config.gcode.status_desired.trim().to_string(),
+            );
+            Box::new(serial_handler)
+        },
+    };
 
-    odyssey::start_odyssey(build_runtime(), config, Box::new(serial_handler));
+    
+
+    odyssey::start_odyssey(build_runtime(), config, serial_handler);
 }
 
 pub async fn serial_feedback_loop(
