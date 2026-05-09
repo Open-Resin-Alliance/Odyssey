@@ -2,9 +2,9 @@ use std::{str::FromStr, sync::Arc};
 
 use clap::Parser;
 
-use tokio::runtime::{Builder, Runtime};
+use tokio::{net::UnixStream, runtime::{Builder, Runtime}};
 
-use odyssey::{configuration::Configuration, serial_handler::SerialPortHandler};
+use odyssey::{configuration::Configuration, shutdown_handler::ShutdownHandler};
 use tracing::level_filters::LevelFilter;
 
 #[derive(Parser, Debug)]
@@ -33,15 +33,9 @@ fn main() {
             .expect("Config could not be parsed. See example odyssey.yaml for expected fields:"),
     );
 
-    let serial_handler = Box::new(
-        SerialPortHandler::new(
-            &configuration.printer.serial,
-            configuration.printer.baudrate,
-        )
-        .expect("Unable to open serialport"),
-    );
+    let runtime = build_runtime();
 
-    odyssey::start_odyssey(build_runtime(), configuration, serial_handler);
+    runtime.block_on(odyssey::run_odyssey(configuration, None, ShutdownHandler::new()))
 }
 
 fn build_runtime() -> Runtime {

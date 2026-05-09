@@ -10,7 +10,7 @@ use poem_openapi::{Enum, Object};
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
-use crate::{configuration::FileDirectory, error::OdysseyError};
+use crate::{configuration::FileDirectory, error::OdysseyError, hardware_control::HardwareState};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct FileData {
@@ -127,21 +127,16 @@ pub struct PrinterState {
     pub print_data: Option<PrintMetadata>,
     pub paused: Option<bool>,
     pub layer: Option<usize>,
-    pub physical_state: PhysicalState,
+    pub hardware_state: HardwareState,
     pub status: PrinterStatus,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Enum)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Enum, Default)]
 pub enum PrinterStatus {
     Printing,
     Idle,
+    #[default]
     Shutdown,
-}
-
-impl Default for PrinterStatus {
-    fn default() -> Self {
-        Self::Shutdown
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Enum)]

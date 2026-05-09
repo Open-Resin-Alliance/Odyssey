@@ -1,8 +1,8 @@
 use odyssey::configuration::{
-    ApiConfig, Configuration, DisplayConfig, FileDirectory, GcodeConfig, PrinterConfig,
+    ApiConfig, Configuration, DisplayConfig, FileDirectory, GcodeConfig, KlipperUDSConfig, PrinterConfig
 };
 
-pub mod mock_serial_handler;
+pub mod mock_uds_handler;
 
 #[allow(unused_variables)]
 pub static TEST_RESOURCE_DIR: &str = "tests/resources";
@@ -15,8 +15,6 @@ pub fn default_test_configuration() -> Configuration {
     Configuration {
         config_file: Some("".to_owned()),
         printer: PrinterConfig {
-            serial: String::from("/dev/null"),
-            baudrate: 250000,
             max_z: 300.0,
             default_lift: 10.0,
             default_up_speed: 3.4,
@@ -25,7 +23,8 @@ pub fn default_test_configuration() -> Configuration {
             default_wait_after_exposure: 1.5,
             pause_lift: 100.0,
         },
-        gcode: GcodeConfig {
+        klipper_uds: KlipperUDSConfig {
+            connection_path: String::from("/dev/null"),
             boot: String::from("G90"),
             shutdown: String::from("M84\nUVLED_OFF"),
             home_command: String::from("HOME_AXIS"),
@@ -35,10 +34,7 @@ pub fn default_test_configuration() -> Configuration {
             layer_start: String::from("LAYER_START_GCODE LAYER={layer}"),
             cure_start: String::from("START_CURE"),
             cure_end: String::from("END_CURE"),
-            move_sync: String::from("MOVE COMPLETE RESPONSE"),
-            move_timeout: 60,
-            status_check: String::from("STATUS_GCODE"),
-            status_desired: String::from("READY STATUS RESPONSE"),
+            curing_device: None,
             manual_move_command: None,
         },
         api: ApiConfig {

@@ -4,8 +4,6 @@
 # This section holds the config fields related to the printer, such as its serial
 # connection and its frame buffer specs
 printer:
-  serial: /home/pi/printer_data/comms/klippy.serial
-  baudrate: 0
   max_z: 300
   default_lift: 10
   default_up_speed: 3.4
@@ -26,7 +24,8 @@ display:
 
 # This section holds fields pertaining to the Gcode used to drive the machine's
 # hardware, and signal between the board and Odyssey
-gcode:
+klipper_uds:
+  connection_path: /dev/null
   boot: |
     G90
   shutdown: |

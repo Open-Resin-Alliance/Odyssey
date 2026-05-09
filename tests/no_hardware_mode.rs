@@ -4,12 +4,10 @@ use std::{
     time::Duration,
 };
 
-use crate::common::{mock_serial_handler::MockSerialHandler, test_resource_path};
-use odyssey::configuration::{Configuration, FileDirectory};
+use crate::common::{mock_uds_handler::{self, MockHardwareUDS}, test_resource_path};
+use odyssey::{configuration::{Configuration, FileDirectory}, shutdown_handler::{self, ShutdownHandler}};
 use tokio::{
-    runtime::{Builder, Runtime},
-    sync::broadcast::{self, Receiver, Sender},
-    time::interval,
+    net::UnixStream, runtime::{Builder, Runtime}, sync::broadcast::{self, Receiver, Sender}, task, time::{interval, timeout}
 };
 use tokio_util::sync::CancellationToken;
 use tracing::Level;
@@ -88,56 +86,29 @@ fn _no_hardware_mode(temp_uploads: bool) {
 
     let config = Arc::new(configuration);
 
-    let mut serial_handler = MockSerialHandler::new(config.gcode.move_sync.clone());
-    serial_handler.add_response(
-        config.gcode.status_check.trim().to_string(),
-        config.gcode.status_desired.trim().to_string(),
-    );
+    let runtime = build_runtime();
+    let shutdown_handler = ShutdownHandler::new();
+    
+    runtime.block_on(async move {
+        let (odyssey_side, mock_side) = UnixStream::pair().unwrap();
 
-    odyssey::start_odyssey(build_runtime(), config, Box::new(serial_handler));
+        let mut mock_hardware = MockHardwareUDS { unix_stream: mock_side, mock_state: Default::default()};
+
+        let mock_hardware_handle = task::spawn(async move {
+            mock_hardware.run().await
+        });
+        //        let mock_hardware_handle = task::spawn(async move { mock_hardware_cancellation.run_until_cancelled(mock_hardware.run()).await });
+        let odyssey_handle = task::spawn(odyssey::run_odyssey(config, Some(odyssey_side), shutdown_handler.clone()));
+
+        shutdown_handler.until_shutdown().await;
+
+        let _ = timeout(Duration::from_secs(10), odyssey_handle).await;
+        let _ = timeout(Duration::from_secs(10), mock_hardware_handle).await;
+
+    });
+
 }
 
-pub async fn serial_feedback_loop(
-    sender: Sender<String>,
-    mut receiver: Receiver<String>,
-    cancellation_token: CancellationToken,
-    status_check: String,
-    status_desired: String,
-    move_sync: String,
-) {
-    let mut interval = interval(Duration::from_millis(100));
-
-    loop {
-        if cancellation_token.is_cancelled() {
-            log::info!("Shutting down simulated serial feedback loop");
-            break;
-        }
-        interval.tick().await;
-        match receiver.try_recv() {
-            Ok(command) => {
-                tracing::info!("{}", command);
-
-                let response: String;
-                if command.as_str().trim() == status_check.trim() {
-                    response = status_desired.clone();
-                } else {
-                    response = move_sync.clone();
-                };
-
-                tracing::info!("command='{}', response='{}'", command.trim(), response);
-
-                sender
-                    .send(response)
-                    .expect("Unable to send gcode response message");
-            }
-            Err(err) => {
-                if err == broadcast::error::TryRecvError::Empty {
-                    continue;
-                }
-            }
-        };
-    }
-}
 
 fn build_runtime() -> Runtime {
     Builder::new_multi_thread()

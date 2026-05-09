@@ -1,72 +1,62 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio::sync::watch;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
-use crate::api_objects::DisplayTest;
 use crate::api_objects::FileMetadata;
-use crate::api_objects::PhysicalState;
 use crate::api_objects::PrintMetadata;
 use crate::api_objects::PrinterState;
 use crate::api_objects::PrinterStatus;
 use crate::configuration::*;
 use crate::display::*;
 use crate::error::OdysseyError;
+use crate::hardware_control::HardwareControl;
 use crate::printfile::Layer;
 use crate::printfile::PrintFile;
+use crate::{api_objects::DisplayTest, hardware_control::HardwareState};
 use tokio::time::{interval, sleep, Duration};
 
-pub struct Printer<'a, T: HardwareControl> {
-    pub config: &'a PrinterConfig,
+pub struct Printer<T: HardwareControl> {
+    pub full_config: Arc<Configuration>,
     pub display: PrintDisplay,
     pub hardware_controller: T,
-    pub state: PrinterState,
     pub operation_receiver: mpsc::Receiver<Operation>,
-    pub status_sender: watch::Sender<PrinterState>,
     pub cancellation_token: CancellationToken,
+    state_sender: watch::Sender<PrinterState>,
+    pub state_receiver: watch::Receiver<PrinterState>,
 }
 
-impl<T: HardwareControl> Printer<'_, T> {
-    pub async fn start_printer(
-        config: Arc<Configuration>,
+impl<T: HardwareControl> Printer<T> {
+    pub fn new(
+        full_config: Arc<Configuration>,
         display: PrintDisplay,
-        mut hardware_controller: T,
+        hardware_controller: T,
         operation_receiver: mpsc::Receiver<Operation>,
-        status_sender: watch::Sender<PrinterState>,
         cancellation_token: CancellationToken,
-    ) {
-        hardware_controller
-            .add_print_variable("max_z".to_string(), config.printer.max_z.to_string());
-        hardware_controller.add_print_variable(
-            "z_lift".to_string(),
-            config.printer.default_lift.to_string(),
-        );
+    ) -> Self {
+        let (state_sender, state_receiver) = watch::channel::<PrinterState>(Default::default());
 
-        let mut printer = Printer {
-            config: &config.printer,
+        Printer {
+            full_config: full_config.clone(),
             display,
             hardware_controller,
-            state: PrinterState {
-                print_data: None,
-                paused: None,
-                layer: None,
-                physical_state: PhysicalState {
-                    z: 0.0,
-                    z_microns: 0,
-                    curing: false,
-                },
-                status: PrinterStatus::Shutdown,
-            },
             operation_receiver,
-            status_sender,
+            state_sender,
+            state_receiver,
             cancellation_token,
-        };
+        }
+    }
 
-        printer.start_statemachine().await
+    pub async fn start_printer(mut self) -> Result<(),OdysseyError> {
+        self.hardware_controller
+            .add_state_variable("max_z", self.full_config.printer.max_z.to_string()).await;
+        self.hardware_controller
+            .add_state_variable("z_lift", self.full_config.printer.default_lift.to_string()).await;
+
+        self.start_statemachine().await
     }
 
     pub async fn print_event_loop(&mut self) -> Result<(), OdysseyError> {
@@ -87,35 +77,33 @@ impl<T: HardwareControl> Printer<'_, T> {
             .read()
             .await
             .get_lift()
-            .unwrap_or((self.config.default_lift * 1000.0).trunc() as u32);
+            .unwrap_or((self.full_config.printer.default_lift * 1000.0).trunc() as u32);
         let up_speed = file
             .read()
             .await
             .get_up_speed()
-            .unwrap_or(self.config.default_up_speed);
+            .unwrap_or(self.full_config.printer.default_up_speed);
         let down_speed = file
             .read()
             .await
             .get_down_speed()
-            .unwrap_or(self.config.default_down_speed);
+            .unwrap_or(self.full_config.printer.default_down_speed);
 
         let wait_before_exposure = file
             .read()
             .await
             .get_wait_before_exposure()
-            .unwrap_or(self.config.default_wait_before_exposure);
+            .unwrap_or(self.full_config.printer.default_wait_before_exposure);
         let wait_after_exposure = file
             .read()
             .await
             .get_wait_after_exposure()
-            .unwrap_or(self.config.default_wait_after_exposure);
+            .unwrap_or(self.full_config.printer.default_wait_after_exposure);
 
         let mut pause_interv = interval(Duration::from_millis(100));
 
-        self.hardware_controller.add_print_variable(
-            "total_layers".to_string(),
-            file.read().await.get_layer_count().to_string(),
-        );
+        self.hardware_controller
+            .add_state_variable("total_layers", file.read().await.get_layer_count().to_string()).await;
 
         // Execute start_print command, then report state
         self.wrapped_start_print().await;
@@ -128,10 +116,12 @@ impl<T: HardwareControl> Printer<'_, T> {
             // Run any requested operations that may change the printer state
             self.printing_operation_handler().await;
 
-            match self.state.status {
+            let state = self.state_receiver.borrow().clone();
+
+            match state.status {
                 PrinterStatus::Printing => {
-                    let paused = self.state.paused.unwrap();
-                    let layer = self.state.layer.unwrap();
+                    let paused = state.paused.unwrap_or_default();
+                    let layer = state.layer.unwrap_or_default();
                     if paused {
                         pause_interv.tick().await;
                         continue;
@@ -139,8 +129,7 @@ impl<T: HardwareControl> Printer<'_, T> {
                         match optional_frame {
                             // More frames exist, continue printing
                             Some(cur_frame) => {
-                                self.hardware_controller
-                                    .add_print_variable("layer".to_string(), layer.to_string());
+                                self.hardware_controller.add_state_variable("layer", layer.to_string()).await;
                                 // Start a task to fetch and generate the next
                                 // frame while we're exposing the current one
                                 let gen_next_frame = tokio::spawn(Frame::from_layer(
@@ -223,16 +212,16 @@ impl<T: HardwareControl> Printer<'_, T> {
     }
 
     async fn wrapped_start_print(&mut self) {
-        if let Ok(physical_state) = self.hardware_controller.start_print().await {
-            self.update_physical_state(physical_state).await;
+        if let Ok(hardware_state) = self.hardware_controller.start_print().await {
+            self.update_hardware_state(hardware_state).await;
         } else {
             self.shutdown().await;
         }
     }
 
     async fn wrapped_start_layer(&mut self, layer: usize) {
-        if let Ok(physical_state) = self.hardware_controller.start_layer(layer).await {
-            self.update_physical_state(physical_state).await;
+        if let Ok(hardware_state) = self.hardware_controller.start_layer(layer).await {
+            self.update_hardware_state(hardware_state).await;
         } else {
             self.shutdown().await;
         }
@@ -240,8 +229,9 @@ impl<T: HardwareControl> Printer<'_, T> {
 
     // Execute command and update printer state
     async fn wrapped_command(&mut self, command: String) {
-        if let Ok(physical_state) = self.hardware_controller.manual_command(command).await {
-            self.update_physical_state(physical_state).await;
+        if let Ok(_command_response) = self.hardware_controller.manual_command(command).await {
+            self.update_hardware_state(self.hardware_controller.get_hardware_state())
+                .await;
         } else {
             self.shutdown().await;
         }
@@ -249,8 +239,8 @@ impl<T: HardwareControl> Printer<'_, T> {
 
     // Home and update printer state
     async fn wrapped_home(&mut self) {
-        if let Ok(physical_state) = self.hardware_controller.home().await {
-            self.update_physical_state(physical_state).await;
+        if let Ok(hardware_state) = self.hardware_controller.home().await {
+            self.update_hardware_state(hardware_state).await;
         } else {
             self.shutdown().await;
         }
@@ -264,8 +254,8 @@ impl<T: HardwareControl> Printer<'_, T> {
         self._wrapped_move(z, speed, true).await
     }
     async fn _wrapped_move(&mut self, z: u32, speed: f64, manual: bool) {
-        if let Ok(physical_state) = self.hardware_controller.move_z(z, speed, manual).await {
-            self.update_physical_state(physical_state).await;
+        if let Ok(hardware_state) = self.hardware_controller.move_z(z, speed, manual).await {
+            self.update_hardware_state(hardware_state).await;
         } else {
             self.shutdown().await;
         }
@@ -273,8 +263,8 @@ impl<T: HardwareControl> Printer<'_, T> {
 
     // Start cure and update printer state
     async fn wrapped_start_cure(&mut self) {
-        if let Ok(physical_state) = self.hardware_controller.start_curing().await {
-            self.update_physical_state(physical_state).await;
+        if let Ok(hardware_state) = self.hardware_controller.start_curing().await {
+            self.update_hardware_state(hardware_state).await;
         } else {
             self.shutdown().await;
         }
@@ -282,8 +272,8 @@ impl<T: HardwareControl> Printer<'_, T> {
 
     // Stop cure and update printer state
     async fn wrapped_stop_cure(&mut self) {
-        if let Ok(physical_state) = self.hardware_controller.stop_curing().await {
-            self.update_physical_state(physical_state).await;
+        if let Ok(hardware_state) = self.hardware_controller.stop_curing().await {
+            self.update_hardware_state(hardware_state).await;
         } else {
             self.shutdown().await;
         }
@@ -291,7 +281,7 @@ impl<T: HardwareControl> Printer<'_, T> {
 
     // Move only if paused
     async fn paused_move(&mut self, z: u32, speed: f64) {
-        if self.state.paused.unwrap_or(false) {
+        if self.state_receiver.borrow().paused.unwrap_or(false) {
             self.wrapped_manual_move(z.max(self._get_layer_z()), speed)
                 .await;
         }
@@ -311,12 +301,11 @@ impl<T: HardwareControl> Printer<'_, T> {
     }
 
     async fn end_print(&mut self) {
-        if let Ok(physical_state) = self.hardware_controller.end_print().await {
+        if let Ok(hardware_state) = self.hardware_controller.end_print().await {
             self.hardware_controller
-                .remove_print_variable("total_layers".to_string());
-            self.hardware_controller
-                .remove_print_variable("layer".to_string());
-            self.update_idle_state(physical_state).await;
+                .remove_state_variable("total_layers").await;
+            self.hardware_controller.remove_state_variable("layer").await;
+            self.update_idle_state(hardware_state).await;
             tracing::info!("Print complete.");
         } else {
             self.shutdown().await;
@@ -325,14 +314,12 @@ impl<T: HardwareControl> Printer<'_, T> {
 
     async fn pause_print(&mut self) {
         self.update_paused(true).await;
-        self.wrapped_move(
-            ((self.config.max_z * 1000.0).trunc() as u32).min(
-                self.state.physical_state.z_microns
-                    + ((self.config.pause_lift * 1000.0).trunc() as u32),
-            ),
-            self.config.default_up_speed,
-        )
-        .await;
+        let new_z_microns = ((self.full_config.printer.max_z * 1000.0).trunc() as u32).min(
+            ((self.hardware_controller.get_hardware_state().z * 1000.0).trunc() as u32)
+                + ((self.full_config.printer.pause_lift * 1000.0).trunc() as u32),
+        );
+        self.wrapped_move(new_z_microns, self.full_config.printer.default_up_speed)
+            .await;
     }
 
     async fn resume_print(&mut self) {
@@ -340,13 +327,14 @@ impl<T: HardwareControl> Printer<'_, T> {
     }
 
     fn _get_layer(&self) -> usize {
-        self.state.layer.unwrap_or(0)
+        self.state_receiver.borrow().layer.unwrap_or(0)
     }
 
     fn _get_layer_z(&self) -> u32 {
         ((self._get_layer() + 1) as u32)
             * self
-                .state
+                .state_receiver
+                .borrow()
                 .print_data
                 .clone()
                 .map(|print| print.layer_height_microns)
@@ -354,7 +342,7 @@ impl<T: HardwareControl> Printer<'_, T> {
     }
 
     fn get_print_metadata(&self) -> Option<PrintMetadata> {
-        self.state.print_data.clone()
+        self.state_receiver.borrow().print_data.clone()
     }
 
     async fn display_file_layer(
@@ -375,16 +363,16 @@ impl<T: HardwareControl> Printer<'_, T> {
 
     async fn enter_printing_state(&mut self, print_data: PrintMetadata) {
         tracing::info!("Entering printing state");
-        match self.state.status {
+        let status = self.state_receiver.borrow().status;
+        match status {
             PrinterStatus::Idle => {
                 tracing::debug!("Transitioning from Idle State");
-                self.state = PrinterState {
-                    print_data: Some(print_data),
-                    paused: Some(false),
-                    layer: Some(0),
-                    physical_state: self.state.physical_state,
-                    status: PrinterStatus::Printing,
-                };
+                self.state_sender.send_modify(|state| {
+                    state.print_data = Some(print_data);
+                    state.paused = Some(false);
+                    state.layer = Some(0);
+                    state.status = PrinterStatus::Printing;
+                });
             }
             PrinterStatus::Printing => {
                 tracing::debug!("Already in printing state!");
@@ -395,31 +383,23 @@ impl<T: HardwareControl> Printer<'_, T> {
         }
     }
 
-    async fn update_physical_state(&mut self, new_physical_state: PhysicalState) {
-        match self.state.status {
-            PrinterStatus::Printing => {
-                self.state.physical_state = new_physical_state;
-            }
-            PrinterStatus::Idle => {
-                self.state.physical_state = new_physical_state;
-            }
-            PrinterStatus::Shutdown => (),
-        }
-        self.send_status().await;
+    async fn update_hardware_state(&mut self, new_hardware_state: HardwareState) {
+        self.state_sender
+            .send_modify(|state| state.hardware_state = new_hardware_state);
     }
 
     async fn update_paused(&mut self, new_pause: bool) {
-        if matches!(self.state.status, PrinterStatus::Printing) {
-            self.state.paused = Some(new_pause);
+        if matches!(self.state_receiver.borrow().status, PrinterStatus::Printing) {
+            self.state_sender
+                .send_modify(|state| state.paused = Some(new_pause));
         }
-        self.send_status().await;
     }
 
     async fn update_layer(&mut self, new_layer: usize) {
-        if matches!(self.state.status, PrinterStatus::Printing) {
-            self.state.layer = Some(new_layer);
+        if matches!(self.state_receiver.borrow().status, PrinterStatus::Printing) {
+            self.state_sender
+                .send_modify(|state| state.layer = Some(new_layer));
         }
-        self.send_status().await;
     }
 
     async fn printing_operation_handler(&mut self) {
@@ -434,10 +414,10 @@ impl<T: HardwareControl> Printer<'_, T> {
                 Operation::PausePrint => self.pause_print().await,
                 Operation::ResumePrint => self.resume_print().await,
                 Operation::StopPrint => self.set_idle().await,
-                Operation::QueryState => self.send_status().await,
                 Operation::Shutdown => self.shutdown().await,
                 Operation::ManualMove { z } => {
-                    self.paused_move(z, self.config.default_up_speed).await
+                    self.paused_move(z, self.full_config.printer.default_up_speed)
+                        .await
                 }
                 _ => (),
             };
@@ -449,8 +429,8 @@ impl<T: HardwareControl> Printer<'_, T> {
         tracing::info!("Booting up printer.");
 
         match self.hardware_controller.boot().await {
-            Ok(physical_state) => {
-                self.update_idle_state(physical_state).await;
+            Ok(hardware_state) => {
+                self.update_idle_state(hardware_state).await;
             }
             Err(e) => {
                 tracing::error!("Error booting printer:{}", e);
@@ -481,43 +461,29 @@ impl<T: HardwareControl> Printer<'_, T> {
 
         self.cancellation_token.cancel();
 
-        self.state.status = PrinterStatus::Shutdown;
-        self.state.paused = None;
-        self.state.print_data = None;
-        self.state.physical_state = PhysicalState {
-            z: f64::MAX,
-            z_microns: u32::MAX,
-            curing: false,
-        }
+        self.state_sender.send_modify(|state| {
+            state.status = PrinterStatus::Shutdown;
+            state.paused = None;
+            state.hardware_state = self.hardware_controller.get_hardware_state()
+        });
     }
 
-    /*
-       pub async fn get_operation_sender(&mut self) -> mpsc::Sender<Operation> {
-           self.operation_channel.0.clone()
-       }
-
-       pub async fn get_status_receiver(&mut self) -> broadcast::Receiver<PrinterState> {
-           self.status_channel.0.subscribe()
-       }
-    */
-
-    async fn send_status(&mut self) {
-        self.status_sender
-            .send(self.state.clone())
-            .expect("Failed to send state update");
+    pub fn get_state_receiver(&self) -> watch::Receiver<PrinterState> {
+        self.state_receiver.clone()
     }
 
-    pub async fn start_statemachine(&mut self) {
-        self.hardware_controller.initialize().await;
+    pub async fn start_statemachine(&mut self) -> Result<(), OdysseyError> {
 
         let mut interv = interval(Duration::from_millis(1000));
 
         loop {
             if self.cancellation_token.is_cancelled() {
                 log::info!("Shutting down statemachine");
+                self.hardware_controller.shutdown().await?;
                 break;
             }
-            match self.state.status {
+            let status = self.state_receiver.borrow().status;
+            match status {
                 PrinterStatus::Idle => self.idle_event_loop().await,
                 PrinterStatus::Printing => self
                     .print_event_loop()
@@ -528,21 +494,20 @@ impl<T: HardwareControl> Printer<'_, T> {
 
             interv.tick().await;
         }
+        Ok(())
     }
 
     async fn shutdown_event_loop(&mut self) {
-        let mut shutdown_interv = interval(Duration::from_millis(10000));
+        let mut shutdown_interv = interval(Duration::from_secs(10));
 
         self.shutdown_operation_handler().await;
-
-        if let PrinterStatus::Shutdown = self.state.status {
-            match self.hardware_controller.is_ready().await {
-                Ok(true) => {
-                    self.boot().await;
-                }
-                _ => {
-                    shutdown_interv.tick().await;
-                }
+        let status = self.state_receiver.borrow().status.clone();
+        if matches!(status, PrinterStatus::Shutdown) {
+            if self.hardware_controller.is_ready().await.unwrap_or(false) {
+                self.boot().await;
+            }
+            else {
+                shutdown_interv.tick().await;
             }
         }
     }
@@ -552,24 +517,27 @@ impl<T: HardwareControl> Printer<'_, T> {
         let mut op_result = self.operation_receiver.try_recv();
 
         while let Ok(operation) = op_result {
-            if let Operation::QueryState = operation {
-                self.send_status().await
-            }
+            tracing::warn!(
+                "Received state machine request while shutdown:{:?}",
+                operation
+            );
             op_result = self.operation_receiver.try_recv();
         }
     }
 
     async fn set_idle(&mut self) {
-        self.state.status = PrinterStatus::Idle;
-        self.state.layer = None;
-        self.state.paused = None;
-        self.send_status().await;
+        self.state_sender.send_modify(|state| {
+            state.status = PrinterStatus::Idle;
+            state.layer = None;
+            state.paused = None;
+        });
     }
 
-    async fn update_idle_state(&mut self, physical_state: PhysicalState) {
-        self.state.status = PrinterStatus::Idle;
-        self.state.physical_state = physical_state;
-        self.send_status().await;
+    async fn update_idle_state(&mut self, hardware_state: HardwareState) {
+        self.state_sender.send_modify(|state| {
+            state.status = PrinterStatus::Idle;
+            state.hardware_state = hardware_state;
+        });
     }
 
     async fn idle_operation_handler(&mut self) {
@@ -581,14 +549,13 @@ impl<T: HardwareControl> Printer<'_, T> {
 
         while let Ok(operation) = op_result {
             match operation {
-                Operation::QueryState => self.send_status().await,
                 Operation::StartPrint { file_data } => {
                     self.start_print(file_data).await.unwrap_or(())
                 }
                 Operation::ManualCommand { command } => self.wrapped_command(command).await,
                 Operation::ManualHome => self.wrapped_home().await,
                 Operation::ManualMove { z } => {
-                    self.wrapped_manual_move(z, self.config.default_up_speed)
+                    self.wrapped_manual_move(z, self.full_config.printer.default_up_speed)
                         .await
                 }
                 Operation::ManualCure { cure } => {
@@ -656,29 +623,4 @@ pub enum Operation {
     },
     QueryState,
     Shutdown,
-}
-
-#[async_trait]
-pub trait HardwareControl {
-    async fn is_ready(&mut self) -> Result<bool, OdysseyError>;
-    async fn initialize(&mut self);
-    async fn home(&mut self) -> Result<PhysicalState, OdysseyError>;
-    async fn manual_command(&mut self, command: String) -> Result<PhysicalState, OdysseyError>;
-    async fn start_print(&mut self) -> Result<PhysicalState, OdysseyError>;
-    async fn end_print(&mut self) -> Result<PhysicalState, OdysseyError>;
-    async fn move_z(
-        &mut self,
-        z: u32,
-        speed: f64,
-        manual: bool,
-    ) -> Result<PhysicalState, OdysseyError>;
-    async fn start_layer(&mut self, layer: usize) -> Result<PhysicalState, OdysseyError>;
-    async fn start_curing(&mut self) -> Result<PhysicalState, OdysseyError>;
-    async fn stop_curing(&mut self) -> Result<PhysicalState, OdysseyError>;
-    async fn boot(&mut self) -> Result<PhysicalState, OdysseyError>;
-    async fn shutdown(&mut self) -> Result<(), OdysseyError>;
-    fn get_physical_state(&self) -> Result<PhysicalState, OdysseyError>;
-    fn add_print_variable(&mut self, variable: String, value: String);
-    fn remove_print_variable(&mut self, variable: String);
-    fn clear_variables(&mut self);
 }

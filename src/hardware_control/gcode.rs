@@ -4,11 +4,12 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use regex::Regex;
 use tokio::time::Duration;
+use tokio_util::sync::CancellationToken;
 
 use crate::api_objects::PhysicalState;
 use crate::configuration::GcodeConfig;
 use crate::error::OdysseyError;
-use crate::printer::HardwareControl;
+use crate::hardware_control::HardwareControl;
 use crate::serial_handler::InternalCommsHandler;
 
 pub struct Gcode {
@@ -145,7 +146,7 @@ impl HardwareControl for Gcode {
         };
 
         self.set_position(z);
-        self.add_print_variable("speed".to_string(), speed.to_string());
+        self.add_state_variable("speed".to_string(), speed.to_string());
 
         self.send_and_await_gcode(
             command,
@@ -154,7 +155,7 @@ impl HardwareControl for Gcode {
         )
         .await?;
 
-        self.remove_print_variable("speed".to_string());
+        self.remove_state_variable("speed".to_string());
 
         Ok(self.state)
     }
@@ -207,15 +208,19 @@ impl HardwareControl for Gcode {
         Ok(self.state)
     }
 
-    fn add_print_variable(&mut self, variable: String, value: String) {
+    fn add_state_variable(&mut self, variable: String, value: String) {
         self.gcode_substitutions.insert(variable, value);
     }
 
-    fn remove_print_variable(&mut self, variable: String) {
+    fn remove_state_variable(&mut self, variable: String) {
         self.gcode_substitutions.remove(&variable);
     }
 
-    fn clear_variables(&mut self) {
+    fn clear_state_variables(&mut self) {
         self.gcode_substitutions.clear();
+    }
+
+    async fn run(mut self, cancellation_token: CancellationToken) -> Result<(), OdysseyError> {
+        todo!();
     }
 }

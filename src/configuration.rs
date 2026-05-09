@@ -9,8 +9,6 @@ use crate::error::OdysseyError;
 #[optional_struct(UpdatePrinterConfig)]
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]
 pub struct PrinterConfig {
-    pub serial: String,
-    pub baudrate: u32,
     pub max_z: f64,
     pub default_lift: f64,
     pub default_up_speed: f64,
@@ -46,6 +44,23 @@ pub struct GcodeConfig {
     pub move_timeout: u64,
     pub status_check: String,
     pub status_desired: String,
+}
+
+#[optional_struct(UpdateKlipperUDSConfig)]
+#[derive(Clone, Debug, Serialize, Deserialize, Object)]
+pub struct KlipperUDSConfig {
+    pub connection_path: String,
+    pub boot: String,
+    pub shutdown: String,
+    pub home_command: String,
+    pub move_command: String,
+    pub manual_move_command: Option<String>,
+    pub print_start: String,
+    pub print_end: String,
+    pub layer_start: String,
+    pub cure_start: String,
+    pub cure_end: String,
+    pub curing_device: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Object)]
@@ -112,8 +127,8 @@ pub struct Configuration {
     pub printer: PrinterConfig,
 
     #[optional_wrap]
-    #[optional_rename(UpdateGcodeConfig)]
-    pub gcode: GcodeConfig,
+    #[optional_rename(UpdateKlipperUDSConfig)]
+    pub klipper_uds: KlipperUDSConfig,
 
     #[optional_wrap]
     #[optional_rename(UpdateApiConfig)]
