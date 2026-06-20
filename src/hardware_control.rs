@@ -10,7 +10,7 @@ use tokio_util::sync::CancellationToken;
 //pub mod gcode;
 pub mod klipper_uds;
 
-#[derive(Clone, Debug, Serialize, Deserialize, Enum, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Enum, Default, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum HardwareStatusEnum {
     Ready,

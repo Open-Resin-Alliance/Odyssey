@@ -102,8 +102,8 @@ fn _no_hardware_mode(temp_uploads: bool) {
 
         shutdown_handler.until_shutdown().await;
 
-        let _ = timeout(Duration::from_secs(10), odyssey_handle).await;
-        let _ = timeout(Duration::from_secs(10), mock_hardware_handle).await;
+        let _ = timeout(Duration::from_secs(1), odyssey_handle).await;
+        let _ = timeout(Duration::from_secs(1), mock_hardware_handle).await;
 
     });
 

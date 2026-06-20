@@ -24,14 +24,15 @@ use crate::{
 };
 
 const KLIPPER_STATE_SOURCE: &str = "klipper_state"; // params.status.webhooks.state
-const KLIPPER_STATE_JSON_PATH: &str = "/webhooks/state";
+const KLIPPER_STATE_JSON_PATH: &str = "/status/webhooks/state";
 
 const KLIPPER_STATE_MESSAGE_SOURCE: &str = "klipper_state_message"; // params.status.webhooks.state_message
-const KLIPPER_STATE_MESSAGE_JSON_PATH: &str = "/webhooks/state_message";
+const KLIPPER_STATE_MESSAGE_JSON_PATH: &str = "/status/webhooks/state_message";
 
 const POSITION_SOURCE: &str = "gcode_position"; // params.status.gcode_move.gcode_position
-const POSITION_JSON_PATH: &str = "/gcode_move/gcode_position/2";
-const CURING_SOURCE: &str = "curing"; // ????
+const POSITION_JSON_PATH: &str = "/status/gcode_move/gcode_position/2";
+const CURING_SOURCE: &str = "curing"; 
+const CURING_JSON_PATH: &str = "/status/curing";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KlipperResponseObject {
@@ -184,6 +185,7 @@ impl KlipperUDS {
                 (KLIPPER_STATE_SOURCE.to_string(),KLIPPER_STATE_JSON_PATH.to_string()),
                 (KLIPPER_STATE_MESSAGE_SOURCE.to_string(),KLIPPER_STATE_MESSAGE_JSON_PATH.to_string()),
                 (POSITION_SOURCE.to_string(),POSITION_JSON_PATH.to_string()),
+                (CURING_SOURCE.to_string(),CURING_JSON_PATH.to_string()),
             ]))),
             uds_stream: match uds_stream {
                 Some(us) => Some(Arc::new(us)),
@@ -205,7 +207,7 @@ impl KlipperUDS {
         Ok(())
     }
 
-    #[instrument(skip_all, level = "debug", fields(id = request.id))]
+    #[instrument(skip_all, level = "debug", fields(id = request.id), ret)]
     pub async fn send_request(&self, request: &KlipperRequest) -> Result<(), io::Error> {
         let mut request_bytes = serde_json::to_vec(&request)?;
         request_bytes.push(0x03);
@@ -214,7 +216,6 @@ impl KlipperUDS {
             loop {
                 self.get_uds()?.writable().await?;
 
-                tracing::info!("sending request loop");
                 match self
                     .get_uds()?
                     .try_write(&request_bytes)
@@ -258,13 +259,13 @@ impl KlipperUDS {
     }
 
     #[instrument(skip_all, level = "trace", ret)]
-    fn parse_gcode(&self, code: &str) -> Result<String, OdysseyError> {
+    async fn parse_gcode(&self, code: &str) -> Result<String, OdysseyError> {
         let re: Regex = Regex::new(r"\{(?P<substitution>\w*)\}").unwrap();
         let mut parsed_code = code.to_owned();
 
         for caps in re.captures_iter(&code) {
             let sub = &caps["substitution"].to_string();
-            if let Some(value) = self.variable_substitutions.blocking_read().get(sub) {
+            if let Some(value) = self.variable_substitutions.read().await.get(sub) {
                 parsed_code = parsed_code.replace(&format!("{{{sub}}}"), value)
             } else {
                 return Err(
@@ -284,6 +285,7 @@ impl KlipperUDS {
     }
 
 
+    #[instrument(skip(self), level = "trace", ret)]
     async fn handle_state_watch(&mut self, payload: &Value, source: &str) -> Result<(),OdysseyError>{
 
         // Get the watched path for this source, or return early
@@ -322,6 +324,14 @@ impl KlipperUDS {
                     });
                 }
             }
+            CURING_SOURCE => {
+                if let Some(extracted_payload_value) = from_value::<bool>(target_value).ok()
+                {
+                    self.state_sender.send_modify(|state| {
+                        state.curing = extracted_payload_value
+                    });
+                }
+            }
             peripheral_source => {
                 self.state_sender.send_modify(|state| {
                     state.peripheral.insert(peripheral_source.to_string(), target_value.to_string());
@@ -346,8 +356,6 @@ impl KlipperUDS {
 
 #[async_trait]
 impl HardwareControl for KlipperUDS {
-
-    
     #[instrument(skip_all, level = "debug", ret)]
     async fn is_ready(&mut self) -> Result<bool, OdysseyError> {
         Ok(!matches!(self.get_hardware_state_receiver().borrow().status, HardwareStatusEnum::Startup))
@@ -386,7 +394,7 @@ impl HardwareControl for KlipperUDS {
     async fn home(&mut self) -> Result<HardwareState, OdysseyError> {
         self.send_request_with_response(&KlipperRequest::gcode_script(
             &self.get_new_uuid(),
-            &self.parse_gcode(&self.config.home_command)?,
+            &self.parse_gcode(&self.config.home_command).await?,
         ))
         .await?
         .await
@@ -408,7 +416,7 @@ impl HardwareControl for KlipperUDS {
     async fn start_print(&mut self) -> Result<HardwareState, OdysseyError> {
         self.send_request_with_response(&KlipperRequest::gcode_script(
             &self.get_new_uuid(),
-            &self.parse_gcode(&self.config.print_start)?,
+            &self.parse_gcode(&self.config.print_start).await?,
         ))
         .await?
         .await
@@ -419,7 +427,7 @@ impl HardwareControl for KlipperUDS {
     async fn end_print(&mut self) -> Result<HardwareState, OdysseyError> {
         self.send_request_with_response(&KlipperRequest::gcode_script(
             &self.get_new_uuid(),
-            &self.parse_gcode(&self.config.print_end)?,
+            &self.parse_gcode(&self.config.print_end).await?,
         ))
         .await?
         .await
@@ -447,7 +455,7 @@ impl HardwareControl for KlipperUDS {
                     None => &self.config.move_command,
                 },
                 false => &self.config.move_command,
-            })?,
+            }).await?,
         ))
         .await?
         .await
@@ -459,7 +467,7 @@ impl HardwareControl for KlipperUDS {
         self.add_state_variable("layer", layer.to_string()).await;
         self.send_request_with_response(&KlipperRequest::gcode_script(
             &self.get_new_uuid(),
-            &self.parse_gcode(&self.config.layer_start)?,
+            &self.parse_gcode(&self.config.layer_start).await?,
         ))
         .await?
         .await
@@ -470,7 +478,7 @@ impl HardwareControl for KlipperUDS {
     async fn start_curing(&mut self) -> Result<HardwareState, OdysseyError> {
         self.send_request_with_response(&KlipperRequest::gcode_script(
             &self.get_new_uuid(),
-            &self.parse_gcode(&self.config.cure_start)?,
+            &self.parse_gcode(&self.config.cure_start).await?,
         ))
         .await?
         .await
@@ -481,7 +489,7 @@ impl HardwareControl for KlipperUDS {
     async fn stop_curing(&mut self) -> Result<HardwareState, OdysseyError> {
         self.send_request_with_response(&KlipperRequest::gcode_script(
             &self.get_new_uuid(),
-            &self.parse_gcode(&self.config.cure_end)?,
+            &self.parse_gcode(&self.config.cure_end).await?,
         ))
         .await?
         .await
@@ -492,7 +500,7 @@ impl HardwareControl for KlipperUDS {
     async fn boot(&mut self) -> Result<HardwareState, OdysseyError> {
         self.send_request_with_response(&KlipperRequest::gcode_script(
             &self.get_new_uuid(),
-            &self.parse_gcode(&self.config.boot)?,
+            &self.parse_gcode(&self.config.boot).await?,
         ))
         .await?
         .await
@@ -503,7 +511,7 @@ impl HardwareControl for KlipperUDS {
     async fn shutdown(&mut self) -> Result<(), OdysseyError> {
         self.send_request_with_response(&KlipperRequest::gcode_script(
             &self.get_new_uuid(),
-            &self.parse_gcode(&self.config.shutdown)?,
+            &self.parse_gcode(&self.config.shutdown).await?,
         ))
         .await?
         .await
@@ -548,8 +556,6 @@ impl HardwareControl for KlipperUDS {
             }
 
             cancellation_token.run_until_cancelled(self.get_uds()?.readable()).await;
-            //self.get_uds()?.readable().await?;
-
             
             let data_read = match self.get_uds()?.try_read(&mut read_buf) {
                 Ok(0) => {
@@ -575,11 +581,11 @@ impl HardwareControl for KlipperUDS {
                 },
             };
 
-            
-            let split_reqs = data_read.split(|&byte| byte == 0x03).filter(|&data_piece| !data_piece.is_empty());
+            // Klipper API 
+            let split_resps = data_read.split(|&byte| byte == 0x03).filter(|&data_piece| !data_piece.is_empty());
 
-            for req_data in split_reqs {
-                let klipper_resp_val = match serde_json::from_slice::<KlipperResponseObject>(req_data) {
+            for resp_data in split_resps {
+                let klipper_resp_val = match serde_json::from_slice::<KlipperResponseObject>(resp_data) {
                     Ok(val) => {
                         val
                     }
@@ -588,11 +594,11 @@ impl HardwareControl for KlipperUDS {
                             "Encountered Error while parsing Klipper Response: {}",
                             err
                         );
-                        if let Ok(response_string) = serde_json::from_slice::<String>(req_data) {
-                            tracing::debug!("Raw response string: {:?}", response_string);
+                        if let Ok(response_string) = serde_json::from_slice::<String>(resp_data) {
+                            tracing::trace!("Raw response string: {:?}", response_string);
                         }
                         else {
-                            tracing::trace!("Unparsed Data: {:?}", req_data);
+                            tracing::trace!("Unparsed Data: {:?}", resp_data);
                         }
                         continue;
                     }
@@ -609,9 +615,6 @@ impl HardwareControl for KlipperUDS {
                     self.emit_response(&params_or_result, &source_or_id).await?
                 }
             }
-
-            
-            
 
             interval.tick().await;
         }

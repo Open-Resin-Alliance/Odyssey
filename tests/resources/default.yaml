@@ -41,10 +41,6 @@ klipper_uds:
   layer_start: SET_PRINT_STATS_INFO CURRENT_LAYER={layer}
   cure_start: UVLED_ON
   cure_end: UVLED_OFF
-  move_sync: Z_move_comp
-  move_timeout: 60
-  status_check: status
-  status_desired: "Klipper state: Ready"
 
 # This section holds fields pertaining to the Odyseey API, such as the port number
 # and where to store uploaded .sl1 files
