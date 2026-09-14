@@ -48,6 +48,7 @@ fn emulated_fb() {
             bit_depth: vec![8],
             left_pad_bits: 0,
             right_pad_bits: 0,
+            invert_byte_order: false,
         }),
     });
 }

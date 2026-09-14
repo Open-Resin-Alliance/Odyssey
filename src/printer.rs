@@ -598,8 +598,8 @@ impl<T: HardwareControl> Printer<'_, T> {
                         self.wrapped_stop_cure().await;
                     }
                 }
-                Operation::ManualDisplayTest { test } => {
-                    self.display.display_test(test);
+                Operation::ManualDisplayTest { test, pixel_format } => {
+                    self.display.display_test(test, pixel_format.as_ref());
                 }
                 Operation::ManualDisplayLayer { file_data, layer } => {
                     self.display_file_layer(file_data, layer)
@@ -653,6 +653,7 @@ pub enum Operation {
     },
     ManualDisplayTest {
         test: DisplayTest,
+        pixel_format: Option<PixelFormat>
     },
     QueryState,
     Shutdown,
