@@ -60,9 +60,13 @@ impl PrintDisplay {
             raw_chunk |= ((pixels[i] as u64) >> (bit_depth - pixel_format.bit_depth[i])) << shift
         }
 
-        //println!("{:#032b}", raw_chunk);
+        let byte_order: Vec<u8> = if pixel_format.invert_byte_order {
+            (0..(chunk_size/8)).collect()
+        } else {
+            (0..(chunk_size/8)).rev().collect()
+        };
 
-        for i in 0..(chunk_size / 8) {
+        for i in byte_order {
             // pull the raw chunk back apart into bytes, for push into the new buffer
             let byte = ((raw_chunk >> (8 * i)) & 0xFF) as u8;
             chunk_bytes.push(byte);
@@ -189,7 +193,7 @@ mod tests {
     #[test]
     fn test_re_encode_565() {
         // Input buffer of 3 1-byte pixels
-        let image_buffer: [u8; 3] = [0xFF, 0xFF, 0xFF];
+        let image_buffer: [u8; 3] = [0xFF, 0x00, 0xFF];
         let image_bit_depth = 8;
 
         let chunk_size = 16;
@@ -199,10 +203,11 @@ mod tests {
             bit_depth: vec![5, 6, 5],
             left_pad_bits: 0,
             right_pad_bits: 0,
+            invert_byte_order: true,
         };
 
-        // Should output two bytes, corresponding to 11111 111111 11111
-        let expected_result = vec![0xFF, 0xFF];
+        // Should output two bytes, corresponding to 11111 000000 1111, but swapped
+        let expected_result = vec![0x1F, 0xF8];
 
         let result = PrintDisplay::re_encode_pixel_group(
             &pixel_format,
@@ -217,7 +222,7 @@ mod tests {
     #[test]
     fn test_re_encode_3bit8() {
         // Input buffer of 8 1-byte pixels
-        let image_buffer: [u8; 8] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+        let image_buffer: [u8; 8] = [0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
         let image_bit_depth = 8;
 
         let chunk_size = 32;
@@ -227,10 +232,11 @@ mod tests {
             bit_depth: vec![3, 3, 3, 3, 3, 3, 3, 3],
             left_pad_bits: 0,
             right_pad_bits: 8,
+            invert_byte_order: false,
         };
 
-        // Should output four bytes, corresponding to values of 7,7,7,7,7,7,7,7,<PADDING>
-        let expected_result = vec![0x00, 0xFF, 0xFF, 0xFF];
+        // Should output four bytes, corresponding to values of 7,0,7,7,7,7,7,7,<PADDING>
+        let expected_result = vec![0xE3, 0xFF, 0xFF, 0x00];
 
         let result = PrintDisplay::re_encode_pixel_group(
             &pixel_format,
@@ -255,6 +261,7 @@ mod tests {
             bit_depth: vec![8],
             left_pad_bits: 0,
             right_pad_bits: 0,
+            invert_byte_order: false,
         };
 
         // Should output the same as what was input
