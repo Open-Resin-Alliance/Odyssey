@@ -74,23 +74,30 @@ impl PrintDisplay {
 
         chunk_bytes
     }
-    fn re_encode(&self, buffer: Vec<u8>, bit_depth: u8) -> Vec<u8> {
-        if self.config.pixel_format.bit_depth.len() == 1
-            && self.config.pixel_format.bit_depth[0] == bit_depth
+    fn re_encode(pixel_format: &PixelFormat, buffer: Vec<u8>, bit_depth: u8) -> Vec<u8> {
+        if pixel_format.bit_depth.len() == 1
+            && pixel_format.bit_depth[0] == bit_depth
         {
             return buffer;
         }
 
-        let chunk_size: u8 = self.config.pixel_format.left_pad_bits
-            + self.config.pixel_format.bit_depth.iter().sum::<u8>()
-            + self.config.pixel_format.right_pad_bits;
-        tracing::debug!("Re-encoding frame with bit-depth {} into {} pixels in {} bits, with the following bit layout: {:?}", bit_depth, self.config.pixel_format.bit_depth.len(), chunk_size, self.config.pixel_format.bit_depth);
+        let chunk_size: u8 = pixel_format.left_pad_bits
+            + pixel_format.bit_depth.iter().sum::<u8>()
+            + pixel_format.right_pad_bits;
+
+        tracing::debug!(
+            "Re-encoding frame with bit-depth {} into {} pixels in {} bits, with the following bit layout: {:?}",
+            bit_depth,
+            pixel_format.bit_depth.len(),
+            chunk_size,
+            pixel_format.bit_depth
+        );
 
         buffer
-            .chunks_exact(self.config.pixel_format.bit_depth.len())
+            .chunks_exact(pixel_format.bit_depth.len())
             .flat_map(|pixel_group| {
                 Self::re_encode_pixel_group(
-                    &self.config.pixel_format,
+                    pixel_format,
                     pixel_group,
                     bit_depth,
                     chunk_size,
@@ -104,23 +111,27 @@ impl PrintDisplay {
     }
 
     fn display_rencoded_bytes(&mut self, buffer: Vec<u8>, bit_depth: u8) {
-        self.display_bytes(&self.re_encode(buffer, bit_depth));
+        self.display_bytes(&Self::re_encode(&self.config.pixel_format, buffer, bit_depth));
     }
     fn display_bytes(&mut self, buffer: &[u8]) {
         self.frame_buffer.write_frame(buffer);
     }
 
-    pub fn display_test(&mut self, test: DisplayTest) {
+    pub fn display_test(&mut self, test: DisplayTest, pixel_format: Option<&PixelFormat>) {
         let test_bytes = match test {
             DisplayTest::White => self.display_test_white(),
             DisplayTest::Blank => self.display_test_blank(),
-            DisplayTest::Diagonal => self.display_test_diagonal(16),
+            DisplayTest::Diagonal => self.display_test_diagonal(64),
             DisplayTest::ValueRange => self.display_test_value_range(),
             DisplayTest::Grid => self.display_test_blank(),
             DisplayTest::Dimensions => self.display_test_blank(),
         };
 
-        self.display_rencoded_bytes(test_bytes, 8);
+        self.display_bytes(&Self::re_encode(
+            pixel_format.unwrap_or(&self.config.pixel_format),
+            test_bytes,
+            8
+        ));
     }
 
     fn display_test_white(&mut self) -> Vec<u8> {
@@ -153,20 +164,21 @@ impl PrintDisplay {
             .min()
             .cloned()
             .unwrap_or(8);
-        let max_val = (2_u32.pow(min_bit_depth as u32) - 1) as u8;
-        let block_width = max(self.config.screen_width / (max_val as u32), 1);
 
-        let val_from_pixel_index = |index| {
-            let col = index % self.config.screen_width;
-            let val = (col / block_width) as u8;
-            if index < self.config.screen_width {
-                tracing::info!("index {index} col {col} val {:X}|{:b}", val, val);
-            }
-            val
-        };
+        let num_vals = (2_u32.pow(min_bit_depth as u32)) as u32;
 
-        let pixel_count = self.config.screen_width * self.config.screen_height;
-        (0..pixel_count).map(val_from_pixel_index).collect()
+        let block_width = max(self.config.screen_width / num_vals, 1);
+        tracing::debug!(
+            "Dividing screen ({} pixels wide) into {} columns of {} pixels",
+            self.config.screen_width,
+            num_vals,
+            block_width
+        );
+
+        (0..self.config.screen_height).flat_map(|_|
+            (0..num_vals).flat_map(|val|
+                vec![val as u8; block_width as usize]
+        )).collect()
     }
 
     pub fn new(config: &DisplayConfig) -> PrintDisplay {
