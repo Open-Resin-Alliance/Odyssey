@@ -1,11 +1,16 @@
 use std::sync::Arc;
 
 use poem::{web::Data, Result};
-use poem_openapi::{param::Query, OpenApi};
+use poem_openapi::{param::Query, payload::Json, OpenApi};
 use tokio::sync::mpsc;
 use tracing::instrument;
 
-use crate::{api::Api, api_objects::DisplayTest, configuration::Configuration, printer::Operation};
+use crate::{
+    api::Api,
+    api_objects::DisplayTest,
+    configuration::{Configuration, PixelFormat},
+    printer::Operation,
+};
 
 #[derive(Debug)]
 pub struct ManualApi;
@@ -65,11 +70,12 @@ impl ManualApi {
     async fn manual_display_test(
         &self,
         Query(test): Query<DisplayTest>,
+        Json(pixel_format): Json<Option<PixelFormat>>,
         Data(operation_sender): Data<&mpsc::Sender<Operation>>,
     ) -> Result<()> {
         Ok(Api::send_statemachine_operation(
             operation_sender,
-            Operation::ManualDisplayTest { test },
+            Operation::ManualDisplayTest { test, pixel_format },
         )
         .await?)
     }

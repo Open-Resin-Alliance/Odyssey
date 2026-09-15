@@ -27,6 +27,8 @@ pub struct PixelFormat {
     pub left_pad_bits: u8,
     #[serde(default)]
     pub right_pad_bits: u8,
+    #[serde(default)]
+    pub invert_byte_order: bool,
 }
 
 #[optional_struct(UpdateDisplayConfig)]
