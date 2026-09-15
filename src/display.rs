@@ -185,10 +185,9 @@ impl PrintDisplay {
         (0..display_height)
             .flat_map(|_|
             // since values are truncated during conversion to the desired
-            // bit depth, we generate the range of N values as the top N values
-            // in an 8 bit space
+            // bit depth, we shift the values left into the appropriate positions
             (0..num_vals).rev().flat_map(|val|
-                vec![(0xFF-val) as u8; block_width as usize]
+                vec![(val<<(8-min_bit_depth)) as u8; block_width as usize]
         ))
             .collect()
     }
@@ -270,6 +269,60 @@ mod tests {
         );
 
         assert_eq!(result, expected_result);
+    }
+
+    #[test]
+    fn test_re_encode_gray() {
+        let image_bit_depth = 8;
+        let chunk_size = 8;
+
+        // Re-encoded for 16k bit schema
+        let pixel_format = PixelFormat {
+            bit_depth: vec![4, 4],
+            left_pad_bits: 0,
+            right_pad_bits: 0,
+            invert_byte_order: false,
+        };
+
+        assert_eq!(
+            vec![0xFF],
+            PrintDisplay::re_encode_pixel_group(
+                &pixel_format,
+                &[0xFF, 0xFF],
+                image_bit_depth,
+                chunk_size,
+            )
+        );
+
+        assert_eq!(
+            vec![0x00],
+            PrintDisplay::re_encode_pixel_group(
+                &pixel_format,
+                &[0x00, 0x00],
+                image_bit_depth,
+                chunk_size,
+            )
+        );
+
+        assert_eq!(
+            vec![0xEE],
+            PrintDisplay::re_encode_pixel_group(
+                &pixel_format,
+                &[0xEF, 0xEF],
+                image_bit_depth,
+                chunk_size,
+            )
+        );
+
+        assert_eq!(
+            vec![0xEE],
+            PrintDisplay::re_encode_pixel_group(
+                &pixel_format,
+                &[0xE0, 0xE0],
+                image_bit_depth,
+                chunk_size,
+            )
+        );
     }
 
     #[test]
