@@ -61,9 +61,9 @@ impl PrintDisplay {
         }
 
         let byte_order: Vec<u8> = if pixel_format.invert_byte_order {
-            (0..(chunk_size/8)).collect()
+            (0..(chunk_size / 8)).collect()
         } else {
-            (0..(chunk_size/8)).rev().collect()
+            (0..(chunk_size / 8)).rev().collect()
         };
 
         for i in byte_order {
@@ -75,9 +75,7 @@ impl PrintDisplay {
         chunk_bytes
     }
     fn re_encode(pixel_format: &PixelFormat, buffer: Vec<u8>, bit_depth: u8) -> Vec<u8> {
-        if pixel_format.bit_depth.len() == 1
-            && pixel_format.bit_depth[0] == bit_depth
-        {
+        if pixel_format.bit_depth.len() == 1 && pixel_format.bit_depth[0] == bit_depth {
             return buffer;
         }
 
@@ -96,12 +94,7 @@ impl PrintDisplay {
         buffer
             .chunks_exact(pixel_format.bit_depth.len())
             .flat_map(|pixel_group| {
-                Self::re_encode_pixel_group(
-                    pixel_format,
-                    pixel_group,
-                    bit_depth,
-                    chunk_size,
-                )
+                Self::re_encode_pixel_group(pixel_format, pixel_group, bit_depth, chunk_size)
             })
             .collect()
     }
@@ -111,7 +104,11 @@ impl PrintDisplay {
     }
 
     fn display_rencoded_bytes(&mut self, buffer: Vec<u8>, bit_depth: u8) {
-        self.display_bytes(&Self::re_encode(&self.config.pixel_format, buffer, bit_depth));
+        self.display_bytes(&Self::re_encode(
+            &self.config.pixel_format,
+            buffer,
+            bit_depth,
+        ));
     }
     fn display_bytes(&mut self, buffer: &[u8]) {
         self.frame_buffer.write_frame(buffer);
@@ -119,18 +116,32 @@ impl PrintDisplay {
 
     pub fn display_test(&mut self, test: DisplayTest, pixel_format: Option<&PixelFormat>) {
         let test_bytes = match test {
-            DisplayTest::White => Self::display_test_white(self.config.screen_width, self.config.screen_height),
-            DisplayTest::Blank => Self::display_test_blank(self.config.screen_width, self.config.screen_height),
-            DisplayTest::Diagonal => Self::display_test_diagonal(self.config.screen_width, self.config.screen_height, 32),
-            DisplayTest::ValueRange => Self::display_test_value_range(self.config.screen_width, self.config.screen_height, pixel_format.unwrap_or(&self.config.pixel_format)),
-            DisplayTest::Grid => Self::display_test_blank(self.config.screen_width, self.config.screen_height),
-            DisplayTest::Dimensions => Self::display_test_blank(self.config.screen_width, self.config.screen_height),
+            DisplayTest::White => {
+                Self::display_test_white(self.config.screen_width, self.config.screen_height)
+            }
+            DisplayTest::Blank => {
+                Self::display_test_blank(self.config.screen_width, self.config.screen_height)
+            }
+            DisplayTest::Diagonal => {
+                Self::display_test_diagonal(self.config.screen_width, self.config.screen_height, 32)
+            }
+            DisplayTest::ValueRange => Self::display_test_value_range(
+                self.config.screen_width,
+                self.config.screen_height,
+                pixel_format.unwrap_or(&self.config.pixel_format),
+            ),
+            DisplayTest::Grid => {
+                Self::display_test_blank(self.config.screen_width, self.config.screen_height)
+            }
+            DisplayTest::Dimensions => {
+                Self::display_test_blank(self.config.screen_width, self.config.screen_height)
+            }
         };
 
         self.display_bytes(&Self::re_encode(
             pixel_format.unwrap_or(&self.config.pixel_format),
             test_bytes,
-            8
+            8,
         ));
     }
 
@@ -139,29 +150,29 @@ impl PrintDisplay {
     }
 
     fn display_test_blank(display_width: u32, display_height: u32) -> Vec<u8> {
-        vec![0x00; (display_width * display_height)  as usize]
+        vec![0x00; (display_width * display_height) as usize]
     }
 
     fn display_test_diagonal(display_width: u32, display_height: u32, columns: u32) -> Vec<u8> {
-
         let col_width = display_width / columns;
 
-        (0..display_height).flat_map(|row|
-            (0..display_width).map(|col|
-                    0xFF*(((col+row)/col_width)%2) as u8
-                ).collect::<Vec<u8>>()
-        ).collect()
+        (0..display_height)
+            .flat_map(|row| {
+                (0..display_width)
+                    .map(|col| 0xFF * (((col + row) / col_width) % 2) as u8)
+                    .collect::<Vec<u8>>()
+            })
+            .collect()
     }
 
-    fn display_test_value_range(display_width: u32, display_height: u32, pixel_format: &PixelFormat) -> Vec<u8> {
-        let min_bit_depth = pixel_format
-            .bit_depth
-            .iter()
-            .min()
-            .cloned()
-            .unwrap_or(8);
+    fn display_test_value_range(
+        display_width: u32,
+        display_height: u32,
+        pixel_format: &PixelFormat,
+    ) -> Vec<u8> {
+        let min_bit_depth = pixel_format.bit_depth.iter().min().cloned().unwrap_or(8);
 
-        let num_vals = (2_u32.pow(min_bit_depth as u32)) as u32;
+        let num_vals = 2_u32.pow(min_bit_depth as u32);
 
         let block_width = max(display_width / num_vals, 1);
         tracing::debug!(
@@ -171,13 +182,15 @@ impl PrintDisplay {
             block_width
         );
 
-        (0..display_height).flat_map(|_|
+        (0..display_height)
+            .flat_map(|_|
             // since values are truncated during conversion to the desired
             // bit depth, we generate the range of N values as the top N values
             // in an 8 bit space
             (0..num_vals).rev().flat_map(|val|
                 vec![(0xFF-val) as u8; block_width as usize]
-        )).collect()
+        ))
+            .collect()
     }
 
     pub fn new(config: &DisplayConfig) -> PrintDisplay {
@@ -293,14 +306,15 @@ mod tests {
         let display_width: u32 = 4;
         let display_height: u32 = 3;
 
+        #[rustfmt::skip]
         let expected_result: Vec<u8> = vec![
             0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00,
-            ];
+        ];
 
-        let result = PrintDisplay::display_test_blank(display_width,display_height);
-        assert_eq!(result, expected_result);        
+        let result = PrintDisplay::display_test_blank(display_width, display_height);
+        assert_eq!(result, expected_result);
     }
 
     #[test]
@@ -308,13 +322,14 @@ mod tests {
         let display_width: u32 = 4;
         let display_height: u32 = 3;
 
+        #[rustfmt::skip]
         let expected_result: Vec<u8> = vec![
             0xFF, 0xFF, 0xFF, 0xFF,
             0xFF, 0xFF, 0xFF, 0xFF,
             0xFF, 0xFF, 0xFF, 0xFF,
-            ];
+        ];
 
-        let result = PrintDisplay::display_test_white(display_width,display_height);
+        let result = PrintDisplay::display_test_white(display_width, display_height);
         assert_eq!(result, expected_result);
     }
 
@@ -324,13 +339,14 @@ mod tests {
         let display_height: u32 = 3;
         let columns: u32 = 3;
 
+        #[rustfmt::skip]
         let expected_result: Vec<u8> = vec![
             0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00,
             0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF,
-            0xFF, 0xFF, 0x00 ,0x00, 0xFF, 0xFF,
-            ];
+            0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF,
+        ];
 
-        let result = PrintDisplay::display_test_diagonal(display_width,display_height, columns);
+        let result = PrintDisplay::display_test_diagonal(display_width, display_height, columns);
         assert_eq!(result, expected_result);
     }
 
@@ -338,17 +354,22 @@ mod tests {
     fn test_value_display() {
         let display_width: u32 = 8;
         let display_height: u32 = 3;
-        let pixel_format: PixelFormat = PixelFormat { bit_depth: vec![2], left_pad_bits: 0, right_pad_bits: 0, invert_byte_order: false };
+        let pixel_format: PixelFormat = PixelFormat {
+            bit_depth: vec![2],
+            left_pad_bits: 0,
+            right_pad_bits: 0,
+            invert_byte_order: false,
+        };
 
+        #[rustfmt::skip]
         let expected_result: Vec<u8> = vec![
             0xFC, 0xFC, 0xFD, 0xFD, 0xFE, 0xFE, 0xFF, 0xFF,
             0xFC, 0xFC, 0xFD, 0xFD, 0xFE, 0xFE, 0xFF, 0xFF,
             0xFC, 0xFC, 0xFD, 0xFD, 0xFE, 0xFE, 0xFF, 0xFF,
         ];
 
-        let result = PrintDisplay::display_test_value_range(display_width,display_height, &pixel_format);
+        let result =
+            PrintDisplay::display_test_value_range(display_width, display_height, &pixel_format);
         assert_eq!(result, expected_result);
     }
-
-
 }

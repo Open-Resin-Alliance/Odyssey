@@ -653,7 +653,7 @@ pub enum Operation {
     },
     ManualDisplayTest {
         test: DisplayTest,
-        pixel_format: Option<PixelFormat>
+        pixel_format: Option<PixelFormat>,
     },
     QueryState,
     Shutdown,
