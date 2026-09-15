@@ -1,11 +1,16 @@
 use std::sync::Arc;
 
 use poem::{web::Data, Result};
-use poem_openapi::{OpenApi, param::Query, payload::Json};
+use poem_openapi::{param::Query, payload::Json, OpenApi};
 use tokio::sync::mpsc;
 use tracing::instrument;
 
-use crate::{api::Api, api_objects::DisplayTest, configuration::{Configuration, PixelFormat}, printer::Operation};
+use crate::{
+    api::Api,
+    api_objects::DisplayTest,
+    configuration::{Configuration, PixelFormat},
+    printer::Operation,
+};
 
 #[derive(Debug)]
 pub struct ManualApi;
