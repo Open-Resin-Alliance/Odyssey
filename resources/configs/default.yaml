@@ -4,6 +4,8 @@
 # This section holds the config fields related to the printer, such as its serial
 # connection and its frame buffer specs
 printer:
+  serial: /home/pi/printer_data/comms/klippy.serial
+  baudrate: 0
   max_z: 300
   default_lift: 10
   default_up_speed: 3.4
@@ -25,8 +27,7 @@ display:
 
 # This section holds fields pertaining to the Gcode used to drive the machine's
 # hardware, and signal between the board and Odyssey
-klipper_uds:
-  connection_path: /dev/null
+gcode:
   boot: |
     G90
   shutdown: |
@@ -42,6 +43,10 @@ klipper_uds:
   layer_start: SET_PRINT_STATS_INFO CURRENT_LAYER={layer}
   cure_start: UVLED_ON
   cure_end: UVLED_OFF
+  move_sync: Z_move_comp
+  move_timeout: 60
+  status_check: status
+  status_desired: "Klipper state: Ready"
 
 # This section holds fields pertaining to the Odyseey API, such as the port number
 # and where to store uploaded .sl1 files

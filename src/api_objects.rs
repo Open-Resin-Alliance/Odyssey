@@ -145,6 +145,8 @@ pub enum DisplayTest {
     Blank,
     Grid,
     Dimensions,
+    Diagonal,
+    ValueRange,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Object)]

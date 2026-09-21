@@ -1,5 +1,5 @@
 use odyssey::configuration::{
-    ApiConfig, Configuration, DisplayConfig, FileDirectory, GcodeConfig, KlipperUDSConfig,
+    ApiConfig, Configuration, DisplayConfig, FileDirectory, GcodeConfig, KlipperUDSConfig, PixelFormat,
     PrinterConfig,
 };
 
@@ -49,9 +49,14 @@ pub fn default_test_configuration() -> Configuration {
         },
         display: DisplayConfig {
             frame_buffer: "/dev/null".to_owned(),
-            bit_depth: vec![5, 6, 5],
             screen_width: 1920,
             screen_height: 1080,
+            pixel_format: PixelFormat {
+                bit_depth: vec![5, 6, 5],
+                left_pad_bits: 0,
+                right_pad_bits: 0,
+                invert_byte_order: false,
+            },
         },
     }
 }
