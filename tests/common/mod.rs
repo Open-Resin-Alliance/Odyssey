@@ -1,6 +1,6 @@
 use odyssey::configuration::{
-    ApiConfig, Configuration, DisplayConfig, FileDirectory, GcodeConfig, KlipperUDSConfig, PixelFormat,
-    PrinterConfig,
+    ApiConfig, Configuration, DisplayConfig, FileDirectory, GcodeConfig, KlipperUDSConfig,
+    PixelFormat, PrinterConfig,
 };
 
 pub mod mock_uds_handler;
