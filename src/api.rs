@@ -18,13 +18,13 @@ use poem_openapi::{
     types::ToJSON,
     OpenApi, OpenApiService,
 };
-use tokio::sync::{mpsc, watch, RwLock};
+use tokio::sync::{mpsc, watch};
 use tokio_stream::wrappers::WatchStream;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::{
-    api_objects::{ExecutableVersion, PhysicalState, PrinterState, PrinterStatus},
+    api_objects::{ExecutableVersion, PrinterState},
     configuration::Configuration,
     error::OdysseyError,
     printer::Operation,
@@ -101,18 +101,6 @@ pub async fn start_api(
     state_receiver: watch::Receiver<PrinterState>,
     cancellation_token: CancellationToken,
 ) {
-    let state_ref = Arc::new(RwLock::new(PrinterState {
-        print_data: None,
-        paused: None,
-        layer: None,
-        physical_state: PhysicalState {
-            z: 0.0,
-            z_microns: 0,
-            curing: false,
-        },
-        status: PrinterStatus::Shutdown,
-    }));
-
     let addr = format!("0.0.0.0:{0}", full_config.api.port);
 
     let api_service = OpenApiService::new(
@@ -141,7 +129,6 @@ pub async fn start_api(
     let app = app
         .data(operation_sender)
         .data(state_receiver)
-        .data(state_ref.clone())
         .data(full_config)
         .data(api_shutdown_trigger)
         .with(Cors::new());

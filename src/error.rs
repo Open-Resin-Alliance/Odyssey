@@ -6,10 +6,7 @@ use std::{
 
 use poem::{error::ResponseError, http::StatusCode};
 use tokio::{
-    sync::{
-        broadcast::error::{RecvError, SendError, TryRecvError},
-        mpsc::error::{SendError as mpscSendError, TryRecvError as mpscTryRecvError},
-    },
+    sync::{broadcast, mpsc, oneshot},
     task::JoinError,
 };
 use zip::result::ZipError;
@@ -83,8 +80,8 @@ impl ResponseError for OdysseyError {
     }
 }
 
-impl From<RecvError> for OdysseyError {
-    fn from(err: RecvError) -> OdysseyError {
+impl From<oneshot::error::RecvError> for OdysseyError {
+    fn from(err: oneshot::error::RecvError) -> OdysseyError {
         OdysseyError {
             error_type: ErrorType::HardwareError,
             source: Box::new(err),
@@ -93,17 +90,8 @@ impl From<RecvError> for OdysseyError {
     }
 }
 
-impl From<TryRecvError> for OdysseyError {
-    fn from(err: TryRecvError) -> OdysseyError {
-        OdysseyError {
-            error_type: ErrorType::HardwareError,
-            source: Box::new(err),
-            error_code: 500,
-        }
-    }
-}
-impl<T: Debug + Send + Sync + 'static> From<SendError<T>> for OdysseyError {
-    fn from(err: SendError<T>) -> OdysseyError {
+impl From<broadcast::error::RecvError> for OdysseyError {
+    fn from(err: broadcast::error::RecvError) -> OdysseyError {
         OdysseyError {
             error_type: ErrorType::HardwareError,
             source: Box::new(err),
@@ -112,8 +100,8 @@ impl<T: Debug + Send + Sync + 'static> From<SendError<T>> for OdysseyError {
     }
 }
 
-impl From<mpscTryRecvError> for OdysseyError {
-    fn from(err: mpscTryRecvError) -> OdysseyError {
+impl From<broadcast::error::TryRecvError> for OdysseyError {
+    fn from(err: broadcast::error::TryRecvError) -> OdysseyError {
         OdysseyError {
             error_type: ErrorType::HardwareError,
             source: Box::new(err),
@@ -121,8 +109,27 @@ impl From<mpscTryRecvError> for OdysseyError {
         }
     }
 }
-impl<T: Debug + Send + Sync + 'static> From<mpscSendError<T>> for OdysseyError {
-    fn from(err: mpscSendError<T>) -> OdysseyError {
+impl<T: Debug + Send + Sync + 'static> From<broadcast::error::SendError<T>> for OdysseyError {
+    fn from(err: broadcast::error::SendError<T>) -> OdysseyError {
+        OdysseyError {
+            error_type: ErrorType::HardwareError,
+            source: Box::new(err),
+            error_code: 500,
+        }
+    }
+}
+
+impl From<mpsc::error::TryRecvError> for OdysseyError {
+    fn from(err: mpsc::error::TryRecvError) -> OdysseyError {
+        OdysseyError {
+            error_type: ErrorType::HardwareError,
+            source: Box::new(err),
+            error_code: 500,
+        }
+    }
+}
+impl<T: Debug + Send + Sync + 'static> From<mpsc::error::SendError<T>> for OdysseyError {
+    fn from(err: mpsc::error::SendError<T>) -> OdysseyError {
         OdysseyError {
             error_type: ErrorType::HardwareError,
             source: Box::new(err),
