@@ -50,11 +50,13 @@ impl<T: HardwareControl> Printer<T> {
         }
     }
 
-    pub async fn start_printer(mut self) -> Result<(),OdysseyError> {
+    pub async fn start_printer(mut self) -> Result<(), OdysseyError> {
         self.hardware_controller
-            .add_state_variable("max_z", self.full_config.printer.max_z.to_string()).await;
+            .add_state_variable("max_z", self.full_config.printer.max_z.to_string())
+            .await;
         self.hardware_controller
-            .add_state_variable("z_lift", self.full_config.printer.default_lift.to_string()).await;
+            .add_state_variable("z_lift", self.full_config.printer.default_lift.to_string())
+            .await;
 
         self.start_statemachine().await
     }
@@ -103,7 +105,11 @@ impl<T: HardwareControl> Printer<T> {
         let mut pause_interv = interval(Duration::from_millis(100));
 
         self.hardware_controller
-            .add_state_variable("total_layers", file.read().await.get_layer_count().to_string()).await;
+            .add_state_variable(
+                "total_layers",
+                file.read().await.get_layer_count().to_string(),
+            )
+            .await;
 
         // Execute start_print command, then report state
         self.wrapped_start_print().await;
@@ -129,7 +135,9 @@ impl<T: HardwareControl> Printer<T> {
                         match optional_frame {
                             // More frames exist, continue printing
                             Some(cur_frame) => {
-                                self.hardware_controller.add_state_variable("layer", layer.to_string()).await;
+                                self.hardware_controller
+                                    .add_state_variable("layer", layer.to_string())
+                                    .await;
                                 // Start a task to fetch and generate the next
                                 // frame while we're exposing the current one
                                 let gen_next_frame = tokio::spawn(Frame::from_layer(
@@ -303,8 +311,11 @@ impl<T: HardwareControl> Printer<T> {
     async fn end_print(&mut self) {
         if let Ok(hardware_state) = self.hardware_controller.end_print().await {
             self.hardware_controller
-                .remove_state_variable("total_layers").await;
-            self.hardware_controller.remove_state_variable("layer").await;
+                .remove_state_variable("total_layers")
+                .await;
+            self.hardware_controller
+                .remove_state_variable("layer")
+                .await;
             self.update_idle_state(hardware_state).await;
             tracing::info!("Print complete.");
         } else {
@@ -473,7 +484,6 @@ impl<T: HardwareControl> Printer<T> {
     }
 
     pub async fn start_statemachine(&mut self) -> Result<(), OdysseyError> {
-
         let mut interv = interval(Duration::from_millis(1000));
 
         loop {
@@ -501,12 +511,11 @@ impl<T: HardwareControl> Printer<T> {
         let mut shutdown_interv = interval(Duration::from_secs(10));
 
         self.shutdown_operation_handler().await;
-        let status = self.state_receiver.borrow().status.clone();
+        let status = self.state_receiver.borrow().status;
         if matches!(status, PrinterStatus::Shutdown) {
             if self.hardware_controller.is_ready().await.unwrap_or(false) {
                 self.boot().await;
-            }
-            else {
+            } else {
                 shutdown_interv.tick().await;
             }
         }

@@ -4,10 +4,20 @@ use std::{
     time::Duration,
 };
 
-use crate::common::{mock_uds_handler::{self, MockHardwareUDS}, test_resource_path};
-use odyssey::{configuration::{Configuration, FileDirectory}, shutdown_handler::{self, ShutdownHandler}};
+use crate::common::{
+    mock_uds_handler::{self, MockHardwareUDS},
+    test_resource_path,
+};
+use odyssey::{
+    configuration::{Configuration, FileDirectory},
+    shutdown_handler::{self, ShutdownHandler},
+};
 use tokio::{
-    net::UnixStream, runtime::{Builder, Runtime}, sync::broadcast::{self, Receiver, Sender}, task, time::{interval, timeout}
+    net::UnixStream,
+    runtime::{Builder, Runtime},
+    sync::broadcast::{self, Receiver, Sender},
+    task,
+    time::{interval, timeout},
 };
 use tokio_util::sync::CancellationToken;
 use tracing::Level;
@@ -88,27 +98,29 @@ fn _no_hardware_mode(temp_uploads: bool) {
 
     let runtime = build_runtime();
     let shutdown_handler = ShutdownHandler::new();
-    
+
     runtime.block_on(async move {
         let (odyssey_side, mock_side) = UnixStream::pair().unwrap();
 
-        let mut mock_hardware = MockHardwareUDS { unix_stream: mock_side, mock_state: Default::default()};
+        let mut mock_hardware = MockHardwareUDS {
+            unix_stream: mock_side,
+            mock_state: Default::default(),
+        };
 
-        let mock_hardware_handle = task::spawn(async move {
-            mock_hardware.run().await
-        });
+        let mock_hardware_handle = task::spawn(async move { mock_hardware.run().await });
         //        let mock_hardware_handle = task::spawn(async move { mock_hardware_cancellation.run_until_cancelled(mock_hardware.run()).await });
-        let odyssey_handle = task::spawn(odyssey::run_odyssey(config, Some(odyssey_side), shutdown_handler.clone()));
+        let odyssey_handle = task::spawn(odyssey::run_odyssey(
+            config,
+            Some(odyssey_side),
+            shutdown_handler.clone(),
+        ));
 
         shutdown_handler.until_shutdown().await;
 
         let _ = timeout(Duration::from_secs(1), odyssey_handle).await;
         let _ = timeout(Duration::from_secs(1), mock_hardware_handle).await;
-
     });
-
 }
-
 
 fn build_runtime() -> Runtime {
     Builder::new_multi_thread()

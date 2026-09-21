@@ -2,7 +2,7 @@ use std::{str::FromStr, sync::Arc};
 
 use clap::Parser;
 
-use tokio::{net::UnixStream, runtime::{Builder, Runtime}};
+use tokio::runtime::{Builder, Runtime};
 
 use odyssey::{configuration::Configuration, shutdown_handler::ShutdownHandler};
 use tracing::level_filters::LevelFilter;
@@ -35,7 +35,11 @@ fn main() {
 
     let runtime = build_runtime();
 
-    runtime.block_on(odyssey::run_odyssey(configuration, None, ShutdownHandler::new()))
+    runtime.block_on(odyssey::run_odyssey(
+        configuration,
+        None,
+        ShutdownHandler::new(),
+    ))
 }
 
 fn build_runtime() -> Runtime {

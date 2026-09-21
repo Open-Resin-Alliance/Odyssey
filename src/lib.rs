@@ -1,15 +1,13 @@
 use crate::{
     configuration::Configuration,
     display::PrintDisplay,
-    hardware_control::{
-        HardwareControl, klipper_uds::{KlipperUDS}
-    },
+    hardware_control::{klipper_uds::KlipperUDS, HardwareControl},
     printer::{Operation, Printer},
     shutdown_handler::ShutdownHandler,
 };
 use git_version::git_version;
 use std::sync::Arc;
-use tokio::{net::UnixStream, runtime::Runtime, sync::mpsc, task};
+use tokio::{net::UnixStream, sync::mpsc, task};
 
 pub mod api;
 pub mod api_objects;
@@ -32,7 +30,7 @@ const COMMIT_HASH: &str = git_version!(fallback = "unknown");
 pub async fn run_odyssey(
     configuration: Arc<Configuration>,
     unix_stream: Option<UnixStream>,
-    shutdown_handler: ShutdownHandler
+    shutdown_handler: ShutdownHandler,
 ) {
     let klipper_uds = KlipperUDS::new(&configuration.klipper_uds, unix_stream);
 
@@ -42,8 +40,11 @@ pub async fn run_odyssey(
 
     let operation_sender = operation_channel.0.clone();
 
-    let klipper_uds_handle =
-        task::spawn(klipper_uds.clone().run(shutdown_handler.cancellation_token.clone()));
+    let klipper_uds_handle = task::spawn(
+        klipper_uds
+            .clone()
+            .run(shutdown_handler.cancellation_token.clone()),
+    );
 
     let printer = Printer::new(
         configuration.clone(),

@@ -132,7 +132,8 @@ impl MockHardwareUDS {
             }
             KlipperRequestMethod::ObjectsQuery => {
                 let objects = req
-                    .params.as_ref()
+                    .params
+                    .as_ref()
                     .unwrap_or(&Value::Null)
                     .get("objects")
                     .unwrap_or(&Value::Null)
@@ -142,7 +143,8 @@ impl MockHardwareUDS {
             KlipperRequestMethod::ObjectsSubscribe => {
                 // TODO: add watches here so we only send status updates after getting the subscribe
                 let objects = req
-                    .params.as_ref()
+                    .params
+                    .as_ref()
                     .unwrap_or(&Value::Null)
                     .get("objects")
                     .unwrap_or(&Value::Null)
@@ -151,7 +153,8 @@ impl MockHardwareUDS {
             }
             KlipperRequestMethod::GcodeScript => {
                 if let Some(caps) = gcode_pattern.captures(
-                    &req.params.as_ref()
+                    &req.params
+                        .as_ref()
                         .unwrap_or(&Value::Null)
                         .get("script")
                         .unwrap_or_default()
