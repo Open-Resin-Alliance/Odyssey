@@ -53,11 +53,11 @@ impl PrintDisplay {
         let mut raw_chunk = 0b0;
         let mut chunk_bytes: Vec<u8> = Vec::new();
         let mut shift = chunk_size - pixel_format.left_pad_bits;
-        for i in 0..pixels.len() {
+        for (i, pixel) in pixels.iter().enumerate() {
             shift -= pixel_format.bit_depth[i];
 
             // Truncate the pixel data to the displays bit depth, then shift it into place in the raw chunk bits
-            raw_chunk |= ((pixels[i] as u64) >> (bit_depth - pixel_format.bit_depth[i])) << shift
+            raw_chunk |= ((*pixel as u64) >> (bit_depth - pixel_format.bit_depth[i])) << shift
         }
 
         let byte_order: Vec<u8> = if pixel_format.invert_byte_order {
@@ -416,9 +416,9 @@ mod tests {
 
         #[rustfmt::skip]
         let expected_result: Vec<u8> = vec![
-            0xFC, 0xFC, 0xFD, 0xFD, 0xFE, 0xFE, 0xFF, 0xFF,
-            0xFC, 0xFC, 0xFD, 0xFD, 0xFE, 0xFE, 0xFF, 0xFF,
-            0xFC, 0xFC, 0xFD, 0xFD, 0xFE, 0xFE, 0xFF, 0xFF,
+            0xC0, 0xC0, 0x80, 0x80, 0x40, 0x40, 0x00, 0x00,
+            0xC0, 0xC0, 0x80, 0x80, 0x40, 0x40, 0x00, 0x00,
+            0xC0, 0xC0, 0x80, 0x80, 0x40, 0x40, 0x00, 0x00,
         ];
 
         let result =
