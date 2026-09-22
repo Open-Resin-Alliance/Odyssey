@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::time::{interval, timeout, Duration};
-use tokio_serial::{ClearBuffer, SerialPort, SerialStream};
+use tokio_serial::SerialStream;
 use tokio_util::sync::CancellationToken;
 
 use crate::error::OdysseyError;
@@ -167,7 +167,7 @@ impl SerialPortHandler {
                 self.baudrate,
             ))?;
 
-            serial_stream.clear(ClearBuffer::All)?;
+            //serial_stream.clear(ClearBuffer::All)?;
             serial_stream.set_exclusive(false)?;
             self.serial_stream = Some(serial_stream);
         }
